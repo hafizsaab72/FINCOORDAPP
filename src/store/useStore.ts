@@ -13,6 +13,8 @@ interface AppState {
   currentUser: CurrentUser | null;
   token: string | null;
 
+  _hasHydrated: boolean;
+
   addExpense: (expense: Expense) => void;
   addBill: (bill: Bill) => void;
   addGroup: (group: Group) => void;
@@ -36,6 +38,7 @@ export const useStore = create<AppState>()(
       currency: 'USD',
       currentUser: null,
       token: null,
+      _hasHydrated: false,
 
       addExpense: expense =>
         set(state => ({
@@ -117,6 +120,19 @@ export const useStore = create<AppState>()(
     {
       name: 'fin-coord-storage',
       storage: createJSONStorage(() => AsyncStorage),
+      partialize: state => ({
+        expenses: state.expenses,
+        bills: state.bills,
+        groups: state.groups,
+        activities: state.activities,
+        isGuest: state.isGuest,
+        currency: state.currency,
+        currentUser: state.currentUser,
+        token: state.token,
+      }),
+      onRehydrateStorage: () => () => {
+        useStore.setState({ _hasHydrated: true });
+      },
     },
   ),
 );

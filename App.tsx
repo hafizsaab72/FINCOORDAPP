@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StatusBar, useColorScheme } from 'react-native';
+import { StatusBar, useColorScheme, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { Provider as PaperProvider } from 'react-native-paper';
 import { ThemeProvider, useAppTheme } from './src/context/ThemeContext';
@@ -10,11 +10,12 @@ import { useStore } from './src/store/useStore';
 import { authService } from './src/services/authService';
 
 function AppContent() {
-  const { isDark } = useAppTheme();
+  const { isDark, theme } = useAppTheme();
   const token = useStore(state => state.token);
   const updateCurrentUser = useStore(state => state.updateCurrentUser);
   const setCurrency = useStore(state => state.setCurrency);
   const signOut = useStore(state => state.signOut);
+  const hasHydrated = useStore(state => state._hasHydrated);
 
   // On every app launch, if a token exists re-fetch the user profile
   // to sync any server-side changes (currency, name, profilePic, etc.)
@@ -42,6 +43,10 @@ function AppContent() {
       },
     },
   };
+
+  if (!hasHydrated) {
+    return <View style={{ flex: 1, backgroundColor: theme.background }} />;
+  }
 
   return (
     <PaperProvider theme={isDark ? paperDarkTheme : paperLightTheme}>

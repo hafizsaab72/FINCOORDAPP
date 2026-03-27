@@ -7,8 +7,10 @@ import { useStore } from '../store/useStore';
 export default function WelcomeScreen({ navigation }: any) {
   const { theme } = useAppTheme();
   const setGuestStatus = useStore(state => state.setGuestStatus);
+  const signOut = useStore(state => state.signOut);
 
   const handleGuest = () => {
+    signOut();
     setGuestStatus(true);
     navigation.navigate('MainTabs');
   };

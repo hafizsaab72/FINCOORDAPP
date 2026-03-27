@@ -189,14 +189,21 @@ export default function SettingsScreen({ navigation }: any) {
           </>
         )}
         <Divider />
-        <List.Item
-          title={currentUser || isGuest ? 'Sign Out' : 'Sign In'}
-          left={props => (
-            <List.Icon {...props} icon={currentUser || isGuest ? 'logout' : 'login'} color="#FF3B30" />
-          )}
-          onPress={handleSignOut}
-          titleStyle={{ color: '#FF3B30' }}
-        />
+        {currentUser ? (
+          <List.Item
+            title="Sign Out"
+            left={props => <List.Icon {...props} icon="logout" color="#FF3B30" />}
+            onPress={handleSignOut}
+            titleStyle={{ color: '#FF3B30' }}
+          />
+        ) : (
+          <List.Item
+            title="Sign In / Create Account"
+            left={props => <List.Icon {...props} icon="login" color={theme.primary} />}
+            onPress={() => navigation.getParent()?.reset({ index: 0, routes: [{ name: 'Welcome' }] })}
+            titleStyle={{ color: theme.primary }}
+          />
+        )}
       </View>
 
       <Portal>

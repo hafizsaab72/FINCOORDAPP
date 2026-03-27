@@ -6,7 +6,7 @@ FinCoord is a React Native application for shared expense management, bill track
 
 ## Features
 
-- **Authentication** — Sign up, sign in, guest mode. JWT-based sessions persisted across launches.
+- **Authentication** — Sign up, sign in, guest mode. JWT-based sessions persist across launches; app reopens directly to the last state.
 - **User Profile** — Edit name, phone, bio, and profile photo (stored as base64 in MongoDB).
 - **Multi-Currency** — 14 currencies selectable from Settings, synced to and from the backend.
 - **Shared Ledger** — Record group expenses with Equal, Percentage, or Custom split logic.
@@ -14,6 +14,7 @@ FinCoord is a React Native application for shared expense management, bill track
 - **Reminder Engine** — Notification scheduling (stubbed; ready for `@notifee/react-native`).
 - **Friends** — Search users, send/accept/reject friend requests, invite via WhatsApp, SMS, or share sheet.
 - **Deep Links** — `fincoord://invite?ref=<userId>` routes to the InviteScreen to add a friend.
+- **App Icon** — Custom branded icon applied to both iOS and Android.
 - **Green-First UI** — MD3 Paper theme: `#0F7A5B` (Light) / `#19A874` (Dark).
 - **Offline-First** — Full data persistence via Zustand + AsyncStorage.
 - **Dark Mode** — System-synced, toggleable from Settings.
@@ -56,8 +57,8 @@ FinCoord is a React Native application for shared expense management, bill track
 | Screen | Route | Notes |
 |---|---|---|
 | WelcomeScreen | `/Welcome` | Create Account / Sign In / Guest |
-| SignInScreen | Stack | Email + password login |
-| SignUpScreen | Stack | Name, email, password registration |
+| SignInScreen | Stack | Email + password login, no header |
+| SignUpScreen | Stack | Name, email, password registration, no header |
 | HomeScreen | Tab: Home | Balance summary, recent activity, user greeting |
 | GroupsScreen | Tab: Groups | Store-backed group list |
 | GroupDetailScreen | Stack | Members, expense list, add expense FAB |
@@ -116,14 +117,29 @@ cd ../FinCoordAPI && npm run dev
 
 ## Deep Links
 
-The app handles `fincoord://` custom URI scheme.
+The app handles the `fincoord://` custom URI scheme.
 
 | URL | Screen |
 |---|---|
 | `fincoord://invite?ref=<userId>` | InviteScreen |
 
-**Android** — Intent filter is declared in `AndroidManifest.xml`.
-**iOS** — URL scheme is declared in `Info.plist` under `CFBundleURLTypes`.
+**Android** — Intent filter declared in `AndroidManifest.xml`.
+**iOS** — URL scheme declared in `Info.plist` under `CFBundleURLTypes`.
+
+---
+
+## App Icon
+
+Custom branded icon stored at `../FinCoordIcons/` (outside the app directory for reuse).
+
+| Folder | Contents |
+|---|---|
+| `store/icon-1024.png` | iOS App Store submission |
+| `store/icon-512.png` | Google Play Store submission |
+| `ios/` | All required iOS sizes (20–180pt) |
+| `android/` | mdpi → xxxhdpi PNGs |
+
+Source SVG: `../FinCoordIcons/source/icon.svg` — edit and re-run `rsvg-convert` to regenerate all sizes.
 
 ---
 
@@ -150,6 +166,7 @@ The app handles `fincoord://` custom URI scheme.
   currency: string;         // ISO 4217 code e.g. 'INR'
   currentUser: CurrentUser | null;
   token: string | null;
+  _hasHydrated: boolean;    // false until AsyncStorage restore completes
 
   // Actions
   addExpense(e): void;
@@ -167,4 +184,4 @@ The app handles `fincoord://` custom URI scheme.
 
 ---
 
-**Version:** 1.1.0
+**Version:** 1.2.0
