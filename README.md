@@ -1,97 +1,130 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# FinCoord: Financial Coordination App
 
-# Getting Started
+FinCoord is a React Native application for shared expense management and bill tracking. It bridges a ledger and a reminder engine around three core pillars: **What I owe**, **What I am owed**, and **What is due next**.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+---
 
-## Step 1: Start Metro
+## Features
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+- **Shared Ledger** — Record group expenses with Equal, Percentage, or Custom split logic.
+- **Bill Memory** — Track one-time and recurring bills with status tracking.
+- **Reminder Engine** — Notification scheduling (stubbed; ready for `@notifee/react-native`).
+- **Green-First UI** — MD3 Paper theme: `#0F7A5B` (Light) / `#19A874` (Dark).
+- **Offline-First** — Full data persistence via Zustand + AsyncStorage.
+- **Guest Mode** — Full app utility without account creation.
+- **Dark Mode** — System-synced, toggleable from Settings.
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+---
 
-```sh
-# Using npm
-npm start
+## Tech Stack
 
-# OR using Yarn
-yarn start
+| Layer | Library |
+|---|---|
+| Framework | React Native 0.84 (New Architecture) + TypeScript |
+| Navigation | React Navigation v7 (Stack + Bottom Tabs) |
+| UI | React Native Paper v5 (MD3) + Vector Icons |
+| State | Zustand v5 (with Persist middleware) |
+| Storage | AsyncStorage v3 |
+| Notifications | Stubbed (`src/utils/notifications.ts`) |
+
+---
+
+## Folder Structure
+
+```
+/FinCoordApp
+├── App.tsx                  # Providers: SafeArea, Theme, Paper, Navigation
+└── /src
+    ├── /components          # Card, SummaryTile, StatusChip, SplitSelector, SearchBar
+    ├── /constants           # paperTheme.ts (MD3 light/dark overrides), theme.ts (tokens)
+    ├── /context             # ThemeContext — useAppTheme() hook, toggleTheme()
+    ├── /navigation          # RootNavigator (Stack + Modals), AppNavigator (Bottom Tabs)
+    ├── /screens             # 9 screens + 3 modals (see below)
+    ├── /store               # useStore.ts — Zustand store with balance hooks
+    ├── /types               # index.ts — Expense, Bill, Group, ActivityEntry, User
+    └── /utils               # validation.ts, notifications.ts
 ```
 
-## Step 2: Build and run your app
+### Screens
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+| Screen | Route | Notes |
+|---|---|---|
+| WelcomeScreen | `/Welcome` | Guest / sign-in entry |
+| HomeScreen | Tab: Home | Balance summary, recent activity |
+| GroupsScreen | Tab: Groups | Store-backed group list |
+| GroupDetailScreen | Stack | Members, expense list, add expense FAB |
+| BillsScreen | Tab: Bills | Upcoming & overdue bills |
+| BillDetailScreen | Stack | Full bill info, mark handled |
+| RemindersScreen | Tab: Reminders | Filtered upcoming bills |
+| ActivityScreen | Tab: Activity | Store-backed activity feed |
+| SettingsScreen | Tab: Settings | Dark mode toggle, clear data |
+| AddExpenseModal | Modal | Split method selector, group-aware |
+| AddBillModal | Modal | Category, due date, recurrence |
+| CreateGroupModal | Modal | Name + member invite |
 
-### Android
+---
 
-```sh
-# Using npm
-npm run android
+## Installation
 
-# OR using Yarn
-yarn android
+```bash
+npm install
 ```
 
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
+**iOS (macOS only):**
+```bash
+cd ios && pod install && cd ..
 ```
 
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
+**Run:**
+```bash
+npx react-native run-android
+npx react-native run-ios
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+---
 
-```sh
-# Using npm
-npm run ios
+## Theme Tokens
 
-# OR using Yarn
-yarn ios
+| Token | Light | Dark | Usage |
+|---|---|---|---|
+| Primary | `#0F7A5B` | `#19A874` | Buttons, active states |
+| Background | `#FFFFFF` | `#121212` | App surface |
+| Surface | `#F5FBF8` | `#1A1A1A` | Cards, panels, modals |
+| Border | `#C9E6D9` | `#2A2A2A` | Dividers, inputs |
+
+---
+
+## Store Shape
+
+```ts
+{
+  expenses: Expense[];
+  bills: Bill[];
+  groups: Group[];
+  activities: ActivityEntry[];
+  isGuest: boolean;
+
+  // Actions (all mutations auto-append to activities[])
+  addExpense(e: Omit<Expense, 'id'>): void;
+  addBill(b: Omit<Bill, 'id'>): void;
+  addGroup(g: Omit<Group, 'id'>): void;
+  markBillHandled(id: string): void;
+  setGuestStatus(v: boolean): void;
+  clearData(): void;
+}
 ```
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+---
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+## Implementation Standards
 
-## Step 3: Modify your app
+- **Validation** — All money inputs pass through `src/utils/validation.ts`.
+- **Prepend** — New transactions are prepended to state arrays for "Recent Activity" visibility.
+- **Persistence** — All state changes sync to AsyncStorage; app is fully offline-capable.
+- **Modularity** — UI components are presentational; logic lives in the store or screen-level hooks.
+- **Notifications** — Scheduling is stubbed in `src/utils/notifications.ts`. Replace with `@notifee/react-native` for production.
 
-Now that you have successfully run the app, let's make changes!
+---
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+**Version:** 1.0.0
+**Maintainer:** Engineering Team
