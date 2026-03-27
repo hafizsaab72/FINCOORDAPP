@@ -48,6 +48,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSContactsUsageDescription</key>
+	<string>FinCoord uses your contacts to find friends who are already on the app.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>FinCoord needs camera access to take your profile photo.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

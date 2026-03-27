@@ -38,4 +38,7 @@ export const friendsService = {
 
   remove: (friendId: string) =>
     apiFetch(`/friends/${friendId}`, 'DELETE'),
+
+  matchContacts: (phones: string[], emails: string[]) =>
+    apiFetch<{ users: FriendUser[] }>('/users/match-contacts', 'POST', { phones, emails }),
 };

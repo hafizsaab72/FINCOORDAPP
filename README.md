@@ -14,7 +14,8 @@ FinCoord is a React Native application for shared expense management, bill track
 - **Reminder Engine** — Notification scheduling (stubbed; ready for `@notifee/react-native`).
 - **Friends** — Search users, send/accept/reject friend requests, invite via WhatsApp, SMS, or share sheet.
 - **Deep Links** — `fincoord://invite?ref=<userId>` routes to the InviteScreen to add a friend.
-- **App Icon** — Custom branded icon applied to both iOS and Android.
+- **App Icon** — Custom branded icon (v2): green gradient + white badge circle + bold "F" monogram. Applied to iOS and Android. Source SVGs and all export sizes stored in `../FinCoordIcons/`.
+- **Splash Screen** — Branded splash on both platforms: green background, white badge, "FinCoord" title, and tagline shown while the app loads.
 - **Green-First UI** — MD3 Paper theme: `#0F7A5B` (Light) / `#19A874` (Dark).
 - **Offline-First** — Full data persistence via Zustand + AsyncStorage.
 - **Dark Mode** — System-synced, toggleable from Settings.
@@ -139,7 +140,16 @@ Custom branded icon stored at `../FinCoordIcons/` (outside the app directory for
 | `ios/` | All required iOS sizes (20–180pt) |
 | `android/` | mdpi → xxxhdpi PNGs |
 
-Source SVG: `../FinCoordIcons/source/icon.svg` — edit and re-run `rsvg-convert` to regenerate all sizes.
+**Design v2:** Rich green gradient background, white circular badge, bold dark-green "F" lettermark — clean, readable at all sizes.
+
+Source SVGs: `../FinCoordIcons/source/icon.svg` (rounded, for iOS) and `icon-square.svg` (flat, for Android). Edit and re-run `rsvg-convert` to regenerate all sizes.
+
+### Splash Screen
+
+| Platform | Implementation |
+|---|---|
+| iOS | `LaunchScreen.storyboard` — green bg, white badge + "F", "FinCoord" title, tagline |
+| Android | `res/drawable/launch_background.xml` + `SplashTheme` in `styles.xml`; `MainActivity.kt` restores `AppTheme` before React Native renders |
 
 ---
 
@@ -184,4 +194,4 @@ Source SVG: `../FinCoordIcons/source/icon.svg` — edit and re-run `rsvg-convert
 
 ---
 
-**Version:** 1.2.0
+**Version:** 1.3.0
