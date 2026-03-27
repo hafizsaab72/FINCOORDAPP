@@ -17,28 +17,17 @@
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
 
-                            <!-- White circular badge -->
-                            <view opaque="NO" contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="Wht-Ci-rcl" layer.cornerRadius="54" layer.masksToBounds="YES">
-                                <rect key="frame" x="145" y="240" width="108" height="108"/>
-                                <color key="backgroundColor" red="1" green="1" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
-                                <userDefinedRuntimeAttributes>
-                                    <userDefinedRuntimeAttribute type="number" keyPath="layer.cornerRadius">
-                                        <integer key="value" value="54"/>
-                                    </userDefinedRuntimeAttribute>
-                                </userDefinedRuntimeAttributes>
-                            </view>
-
-                            <!-- "F" label inside badge -->
+                            <!-- Large bold "F" lettermark -->
                             <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="F" textAlignment="center" lineBreakMode="middleTruncation" baselineAdjustment="alignBaselines" translatesAutoresizingMaskIntoConstraints="NO" id="Flt-RM-7xQ">
-                                <rect key="frame" x="145" y="240" width="108" height="108"/>
-                                <fontDescription key="fontDescription" type="boldSystem" pointSize="62"/>
-                                <color key="textColor" red="0.039" green="0.322" blue="0.251" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                                <rect key="frame" x="153" y="218" width="70" height="96"/>
+                                <fontDescription key="fontDescription" type="boldSystem" pointSize="96"/>
+                                <color key="textColor" red="1" green="1" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                                 <nil key="highlightedColor"/>
                             </label>
 
                             <!-- App name -->
                             <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="FinCoord" textAlignment="center" lineBreakMode="middleTruncation" baselineAdjustment="alignBaselines" translatesAutoresizingMaskIntoConstraints="NO" id="Nam-Ty-5bQ">
-                                <rect key="frame" x="0" y="362" width="375" height="44"/>
+                                <rect key="frame" x="0" y="326" width="375" height="44"/>
                                 <fontDescription key="fontDescription" type="boldSystem" pointSize="36"/>
                                 <color key="textColor" red="1" green="1" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                                 <nil key="highlightedColor"/>
@@ -46,7 +35,7 @@
 
                             <!-- Tagline -->
                             <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Financial Coordination" textAlignment="center" lineBreakMode="middleTruncation" baselineAdjustment="alignBaselines" translatesAutoresizingMaskIntoConstraints="NO" id="Tag-Li-9nE">
-                                <rect key="frame" x="0" y="414" width="375" height="22"/>
+                                <rect key="frame" x="0" y="378" width="375" height="22"/>
                                 <fontDescription key="fontDescription" type="system" pointSize="15"/>
                                 <color key="textColor" red="1" green="1" blue="1" alpha="0.60" colorSpace="custom" customColorSpace="sRGB"/>
                                 <nil key="highlightedColor"/>
@@ -54,31 +43,23 @@
 
                         </subviews>
 
-                        <!-- Brand green background: #0F7A5B -->
+                        <!-- Brand green: #0F7A5B -->
                         <color key="backgroundColor" red="0.059" green="0.478" blue="0.357" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
 
                         <constraints>
-                            <!-- Badge circle: 108×108, centered horizontally, centered vertically at -70 -->
-                            <constraint firstItem="Wht-Ci-rcl" firstAttribute="width" constant="108" id="BdW-11-aaa"/>
-                            <constraint firstItem="Wht-Ci-rcl" firstAttribute="height" constant="108" id="BdH-11-bbb"/>
-                            <constraint firstItem="Wht-Ci-rcl" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="BdX-11-ccc"/>
-                            <constraint firstItem="Wht-Ci-rcl" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" constant="-70" id="BdY-11-ddd"/>
+                            <!-- "F": centered horizontally, centered vertically at -70 -->
+                            <constraint firstItem="Flt-RM-7xQ" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="FlX-11-aaa"/>
+                            <constraint firstItem="Flt-RM-7xQ" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" constant="-70" id="FlY-11-bbb"/>
 
-                            <!-- "F" label: matches badge position exactly -->
-                            <constraint firstItem="Flt-RM-7xQ" firstAttribute="centerX" secondItem="Wht-Ci-rcl" secondAttribute="centerX" id="FlX-22-eee"/>
-                            <constraint firstItem="Flt-RM-7xQ" firstAttribute="centerY" secondItem="Wht-Ci-rcl" secondAttribute="centerY" id="FlY-22-fff"/>
-                            <constraint firstItem="Flt-RM-7xQ" firstAttribute="width" secondItem="Wht-Ci-rcl" secondAttribute="width" id="FlW-22-ggg"/>
-                            <constraint firstItem="Flt-RM-7xQ" firstAttribute="height" secondItem="Wht-Ci-rcl" secondAttribute="height" id="FlH-22-hhh"/>
+                            <!-- App name: full width, top = F bottom + 12 -->
+                            <constraint firstItem="Nam-Ty-5bQ" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="NaL-22-ccc"/>
+                            <constraint firstItem="Ze5-6b-2t3" firstAttribute="trailing" secondItem="Nam-Ty-5bQ" secondAttribute="trailing" id="NaR-22-ddd"/>
+                            <constraint firstItem="Nam-Ty-5bQ" firstAttribute="top" secondItem="Flt-RM-7xQ" secondAttribute="bottom" constant="12" id="NaT-22-eee"/>
 
-                            <!-- App name: full width, top = badge bottom + 16 -->
-                            <constraint firstItem="Nam-Ty-5bQ" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="NaL-33-iii"/>
-                            <constraint firstItem="Ze5-6b-2t3" firstAttribute="trailing" secondItem="Nam-Ty-5bQ" secondAttribute="trailing" id="NaR-33-jjj"/>
-                            <constraint firstItem="Nam-Ty-5bQ" firstAttribute="top" secondItem="Wht-Ci-rcl" secondAttribute="bottom" constant="16" id="NaT-33-kkk"/>
-
-                            <!-- Tagline: full width, top = app name bottom + 6 -->
-                            <constraint firstItem="Tag-Li-9nE" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="TaL-44-lll"/>
-                            <constraint firstItem="Ze5-6b-2t3" firstAttribute="trailing" secondItem="Tag-Li-9nE" secondAttribute="trailing" id="TaR-44-mmm"/>
-                            <constraint firstItem="Tag-Li-9nE" firstAttribute="top" secondItem="Nam-Ty-5bQ" secondAttribute="bottom" constant="6" id="TaT-44-nnn"/>
+                            <!-- Tagline: full width, top = name bottom + 6 -->
+                            <constraint firstItem="Tag-Li-9nE" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="TaL-33-fff"/>
+                            <constraint firstItem="Ze5-6b-2t3" firstAttribute="trailing" secondItem="Tag-Li-9nE" secondAttribute="trailing" id="TaR-33-ggg"/>
+                            <constraint firstItem="Tag-Li-9nE" firstAttribute="top" secondItem="Nam-Ty-5bQ" secondAttribute="bottom" constant="6" id="TaT-33-hhh"/>
                         </constraints>
 
                         <viewLayoutGuide key="safeArea" id="Bcu-3y-fUS"/>
