@@ -2,11 +2,15 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AppNavigator from './AppNavigator';
 import WelcomeScreen from '../screens/WelcomeScreen';
+import SignInScreen from '../screens/SignInScreen';
+import SignUpScreen from '../screens/SignUpScreen';
 import AddExpenseModal from '../screens/AddExpenseModal';
 import AddBillModal from '../screens/AddBillModal';
 import GroupDetailScreen from '../screens/GroupDetailScreen';
 import BillDetailScreen from '../screens/BillDetailScreen';
 import CreateGroupModal from '../screens/CreateGroupModal';
+import ProfileScreen from '../screens/ProfileScreen';
+import InviteScreen from '../screens/InviteScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -14,7 +18,11 @@ export default function RootNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Welcome" component={WelcomeScreen} />
+      <Stack.Screen name="SignIn" component={SignInScreen} options={{ headerShown: true, title: 'Sign In' }} />
+      <Stack.Screen name="SignUp" component={SignUpScreen} options={{ headerShown: true, title: 'Create Account' }} />
       <Stack.Screen name="MainTabs" component={AppNavigator} />
+      <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: true, title: 'My Profile' }} />
+      <Stack.Screen name="Invite" component={InviteScreen} options={{ headerShown: true, title: 'Friend Invite' }} />
 
       <Stack.Screen
         name="GroupDetail"
@@ -28,21 +36,9 @@ export default function RootNavigator() {
       />
 
       <Stack.Group screenOptions={{ presentation: 'modal', headerShown: true }}>
-        <Stack.Screen
-          name="AddExpenseModal"
-          component={AddExpenseModal}
-          options={{ title: 'Add Expense' }}
-        />
-        <Stack.Screen
-          name="AddBillModal"
-          component={AddBillModal}
-          options={{ title: 'Add Bill' }}
-        />
-        <Stack.Screen
-          name="CreateGroupModal"
-          component={CreateGroupModal}
-          options={{ title: 'Create Group' }}
-        />
+        <Stack.Screen name="AddExpenseModal" component={AddExpenseModal} options={{ title: 'Add Expense' }} />
+        <Stack.Screen name="AddBillModal" component={AddBillModal} options={{ title: 'Add Bill' }} />
+        <Stack.Screen name="CreateGroupModal" component={CreateGroupModal} options={{ title: 'Create Group' }} />
       </Stack.Group>
     </Stack.Navigator>
   );

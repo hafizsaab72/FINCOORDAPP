@@ -3,12 +3,15 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Surface, Icon } from 'react-native-paper';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
+import { formatAmount } from '../utils/currency';
 
 export default function HomeScreen() {
   const { theme } = useAppTheme();
   const bills = useStore(state => state.bills);
   const expenses = useStore(state => state.expenses);
   const activities = useStore(state => state.activities);
+  const currency = useStore(state => state.currency);
+  const currentUser = useStore(state => state.currentUser);
 
   const pendingBills = bills.filter(b => b.status === 'pending');
   const overdueBills = bills.filter(b => b.status === 'overdue');
@@ -17,14 +20,14 @@ export default function HomeScreen() {
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
       <Text variant="titleMedium" style={[styles.greeting, { color: theme.text }]}>
-        Good day 👋
+        Good day{currentUser ? `, ${currentUser.name.split(' ')[0]}` : ''} 👋
       </Text>
 
       <View style={styles.tilesRow}>
         <SummaryCard
           icon="cash-multiple"
           label="Total Spend"
-          value={`$${totalSpend.toFixed(2)}`}
+          value={formatAmount(totalSpend, currency)}
           accent={theme.primary}
           bg={theme.surface}
           border={theme.border}

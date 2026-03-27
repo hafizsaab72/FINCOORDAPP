@@ -1,17 +1,21 @@
-# FinCoord: Financial Coordination App
+# FinCoord — Financial Coordination App
 
-FinCoord is a React Native application for shared expense management and bill tracking. It bridges a ledger and a reminder engine around three core pillars: **What I owe**, **What I am owed**, and **What is due next**.
+FinCoord is a React Native application for shared expense management, bill tracking, and friend-based financial coordination. It bridges a ledger and a reminder engine around three core pillars: **What I owe**, **What I am owed**, and **What is due next**.
 
 ---
 
 ## Features
 
+- **Authentication** — Sign up, sign in, guest mode. JWT-based sessions persisted across launches.
+- **User Profile** — Edit name, phone, bio, and profile photo (stored as base64 in MongoDB).
+- **Multi-Currency** — 14 currencies selectable from Settings, synced to and from the backend.
 - **Shared Ledger** — Record group expenses with Equal, Percentage, or Custom split logic.
 - **Bill Memory** — Track one-time and recurring bills with status tracking.
 - **Reminder Engine** — Notification scheduling (stubbed; ready for `@notifee/react-native`).
+- **Friends** — Search users, send/accept/reject friend requests, invite via WhatsApp, SMS, or share sheet.
+- **Deep Links** — `fincoord://invite?ref=<userId>` routes to the InviteScreen to add a friend.
 - **Green-First UI** — MD3 Paper theme: `#0F7A5B` (Light) / `#19A874` (Dark).
 - **Offline-First** — Full data persistence via Zustand + AsyncStorage.
-- **Guest Mode** — Full app utility without account creation.
 - **Dark Mode** — System-synced, toggleable from Settings.
 
 ---
@@ -25,6 +29,8 @@ FinCoord is a React Native application for shared expense management and bill tr
 | UI | React Native Paper v5 (MD3) + Vector Icons |
 | State | Zustand v5 (with Persist middleware) |
 | Storage | AsyncStorage v3 |
+| Image Picker | react-native-image-picker v7 |
+| Backend | FinCoordAPI (Express + MongoDB Atlas) |
 | Notifications | Stubbed (`src/utils/notifications.ts`) |
 
 ---
@@ -33,31 +39,36 @@ FinCoord is a React Native application for shared expense management and bill tr
 
 ```
 /FinCoordApp
-├── App.tsx                  # Providers: SafeArea, Theme, Paper, Navigation
+├── App.tsx                  # Providers: SafeArea, Theme, Paper, Navigation + deep link config
 └── /src
-    ├── /components          # Card, SummaryTile, StatusChip, SplitSelector, SearchBar
-    ├── /constants           # paperTheme.ts (MD3 light/dark overrides), theme.ts (tokens)
+    ├── /constants           # paperTheme.ts (MD3 overrides), config.ts (API base URL)
     ├── /context             # ThemeContext — useAppTheme() hook, toggleTheme()
     ├── /navigation          # RootNavigator (Stack + Modals), AppNavigator (Bottom Tabs)
-    ├── /screens             # 9 screens + 3 modals (see below)
+    ├── /screens             # All screens and modals (see below)
+    ├── /services            # api.ts, authService.ts, friendsService.ts
     ├── /store               # useStore.ts — Zustand store with balance hooks
-    ├── /types               # index.ts — Expense, Bill, Group, ActivityEntry, User
-    └── /utils               # validation.ts, notifications.ts
+    ├── /types               # index.ts — Expense, Bill, Group, ActivityEntry, CurrentUser
+    └── /utils               # currency.ts, validation.ts, notifications.ts
 ```
 
 ### Screens
 
 | Screen | Route | Notes |
 |---|---|---|
-| WelcomeScreen | `/Welcome` | Guest / sign-in entry |
-| HomeScreen | Tab: Home | Balance summary, recent activity |
+| WelcomeScreen | `/Welcome` | Create Account / Sign In / Guest |
+| SignInScreen | Stack | Email + password login |
+| SignUpScreen | Stack | Name, email, password registration |
+| HomeScreen | Tab: Home | Balance summary, recent activity, user greeting |
 | GroupsScreen | Tab: Groups | Store-backed group list |
 | GroupDetailScreen | Stack | Members, expense list, add expense FAB |
 | BillsScreen | Tab: Bills | Upcoming & overdue bills |
 | BillDetailScreen | Stack | Full bill info, mark handled |
 | RemindersScreen | Tab: Reminders | Filtered upcoming bills |
+| FriendsScreen | Tab: Friends | Search, add friends, view requests, invite |
 | ActivityScreen | Tab: Activity | Store-backed activity feed |
-| SettingsScreen | Tab: Settings | Dark mode toggle, clear data |
+| SettingsScreen | Tab: Settings | Currency, dark mode, profile link, clear/delete |
+| ProfileScreen | Stack | Edit name, phone, bio, profile photo |
+| InviteScreen | Stack | Deep link landing page — add friend from invite link |
 | AddExpenseModal | Modal | Split method selector, group-aware |
 | AddBillModal | Modal | Category, due date, recurrence |
 | CreateGroupModal | Modal | Name + member invite |
@@ -83,6 +94,39 @@ npx react-native run-ios
 
 ---
 
+## Backend
+
+This app connects to **FinCoordAPI** (Express + MongoDB Atlas).
+
+The API base URL is configured in `src/constants/config.ts`:
+
+```ts
+// Android emulator → 10.0.2.2 maps to host machine's localhost
+// iOS simulator   → localhost works directly
+const HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+export const API_URL = `http://${HOST}:3000/api`;
+```
+
+Start the API server before running the app:
+```bash
+cd ../FinCoordAPI && npm run dev
+```
+
+---
+
+## Deep Links
+
+The app handles `fincoord://` custom URI scheme.
+
+| URL | Screen |
+|---|---|
+| `fincoord://invite?ref=<userId>` | InviteScreen |
+
+**Android** — Intent filter is declared in `AndroidManifest.xml`.
+**iOS** — URL scheme is declared in `Info.plist` under `CFBundleURLTypes`.
+
+---
+
 ## Theme Tokens
 
 | Token | Light | Dark | Usage |
@@ -103,28 +147,24 @@ npx react-native run-ios
   groups: Group[];
   activities: ActivityEntry[];
   isGuest: boolean;
+  currency: string;         // ISO 4217 code e.g. 'INR'
+  currentUser: CurrentUser | null;
+  token: string | null;
 
-  // Actions (all mutations auto-append to activities[])
-  addExpense(e: Omit<Expense, 'id'>): void;
-  addBill(b: Omit<Bill, 'id'>): void;
-  addGroup(g: Omit<Group, 'id'>): void;
-  markBillHandled(id: string): void;
-  setGuestStatus(v: boolean): void;
+  // Actions
+  addExpense(e): void;
+  addBill(b): void;
+  addGroup(g): void;
+  markBillHandled(id): void;
+  setGuestStatus(v): void;
+  setCurrency(code): void;
+  setAuth(user, token): void;
+  updateCurrentUser(partial): void;
+  signOut(): void;
   clearData(): void;
 }
 ```
 
 ---
 
-## Implementation Standards
-
-- **Validation** — All money inputs pass through `src/utils/validation.ts`.
-- **Prepend** — New transactions are prepended to state arrays for "Recent Activity" visibility.
-- **Persistence** — All state changes sync to AsyncStorage; app is fully offline-capable.
-- **Modularity** — UI components are presentational; logic lives in the store or screen-level hooks.
-- **Notifications** — Scheduling is stubbed in `src/utils/notifications.ts`. Replace with `@notifee/react-native` for production.
-
----
-
-**Version:** 1.0.0
-**Maintainer:** Engineering Team
+**Version:** 1.1.0

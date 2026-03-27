@@ -4,6 +4,7 @@ import { List, FAB, Chip, Divider, Text } from 'react-native-paper';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
 import { Bill } from '../types';
+import { formatAmount } from '../utils/currency';
 
 const STATUS_CONFIG = {
   pending: { color: '#FFAA00', icon: 'clock-outline' },
@@ -14,6 +15,7 @@ const STATUS_CONFIG = {
 export default function BillsScreen({ navigation }: any) {
   const { theme } = useAppTheme();
   const bills = useStore(state => state.bills);
+  const currency = useStore(state => state.currency);
 
   const renderBill = ({ item }: { item: Bill }) => {
     const config = STATUS_CONFIG[item.status];
@@ -27,7 +29,7 @@ export default function BillsScreen({ navigation }: any) {
         right={() => (
           <View style={styles.rightContent}>
             <Text variant="titleSmall" style={[styles.amount, { color: theme.text }]}>
-              ${item.amount.toFixed(2)}
+              {formatAmount(item.amount, currency)}
             </Text>
             <Chip
               compact

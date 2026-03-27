@@ -2,9 +2,16 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Button, Icon } from 'react-native-paper';
 import { useAppTheme } from '../context/ThemeContext';
+import { useStore } from '../store/useStore';
 
 export default function WelcomeScreen({ navigation }: any) {
   const { theme } = useAppTheme();
+  const setGuestStatus = useStore(state => state.setGuestStatus);
+
+  const handleGuest = () => {
+    setGuestStatus(true);
+    navigation.navigate('MainTabs');
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -23,21 +30,30 @@ export default function WelcomeScreen({ navigation }: any) {
       <View style={styles.footer}>
         <Button
           mode="contained"
-          onPress={() => navigation.navigate('MainTabs')}
-          icon="account-arrow-right"
+          onPress={() => navigation.navigate('SignUp')}
+          icon="account-plus"
           contentStyle={styles.btnContent}
           style={styles.btn}
         >
-          Continue as Guest
+          Create Account
         </Button>
         <Button
           mode="outlined"
-          onPress={() => {}}
+          onPress={() => navigation.navigate('SignIn')}
           icon="login"
           contentStyle={styles.btnContent}
           style={styles.btn}
         >
           Sign In
+        </Button>
+        <Button
+          mode="text"
+          onPress={handleGuest}
+          icon="account-arrow-right"
+          textColor="#888"
+          contentStyle={styles.btnContent}
+        >
+          Continue as Guest
         </Button>
       </View>
     </View>

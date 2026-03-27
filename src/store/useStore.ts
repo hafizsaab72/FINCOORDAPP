@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Expense, Bill, Group, ActivityEntry } from '../types';
+import { Expense, Bill, Group, ActivityEntry, CurrentUser } from '../types';
 
 interface AppState {
   expenses: Expense[];
@@ -9,12 +9,19 @@ interface AppState {
   groups: Group[];
   activities: ActivityEntry[];
   isGuest: boolean;
+  currency: string;
+  currentUser: CurrentUser | null;
+  token: string | null;
 
   addExpense: (expense: Expense) => void;
   addBill: (bill: Bill) => void;
   addGroup: (group: Group) => void;
   markBillHandled: (id: string) => void;
   setGuestStatus: (status: boolean) => void;
+  setCurrency: (code: string) => void;
+  setAuth: (user: CurrentUser, token: string) => void;
+  updateCurrentUser: (patch: Partial<CurrentUser>) => void;
+  signOut: () => void;
   clearData: () => void;
 }
 
@@ -26,6 +33,9 @@ export const useStore = create<AppState>()(
       groups: [],
       activities: [],
       isGuest: false,
+      currency: 'USD',
+      currentUser: null,
+      token: null,
 
       addExpense: expense =>
         set(state => ({
@@ -90,8 +100,19 @@ export const useStore = create<AppState>()(
 
       setGuestStatus: status => set({ isGuest: status }),
 
+      setCurrency: code => set({ currency: code }),
+
+      setAuth: (user, token) => set({ currentUser: user, token, isGuest: false }),
+
+      updateCurrentUser: patch =>
+        set(state => ({
+          currentUser: state.currentUser ? { ...state.currentUser, ...patch } : state.currentUser,
+        })),
+
+      signOut: () => set({ currentUser: null, token: null, isGuest: false }),
+
       clearData: () =>
-        set({ expenses: [], bills: [], groups: [], activities: [], isGuest: false }),
+        set({ expenses: [], bills: [], groups: [], activities: [] }),
     }),
     {
       name: 'fin-coord-storage',
@@ -103,12 +124,10 @@ export const useStore = create<AppState>()(
 /**
  * Balance Calculation Selector
  * Returns net balance per person: positive = owed money, negative = owes money.
- * Supports equal, percentage, and custom splits.
  */
 export const useBalances = (groupId: string) => {
-  const expenses = useStore(state =>
-    state.expenses.filter(e => e.groupId === groupId),
-  );
+  const allExpenses = useStore(state => state.expenses);
+  const expenses = allExpenses.filter(e => e.groupId === groupId);
 
   const balances: Record<string, number> = {};
 

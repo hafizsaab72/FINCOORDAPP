@@ -3,11 +3,13 @@ import { View, StyleSheet, FlatList } from 'react-native';
 import { List, FAB, Text, Divider } from 'react-native-paper';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
+import { formatAmount } from '../utils/currency';
 
 export default function GroupsScreen({ navigation }: any) {
   const { theme } = useAppTheme();
   const groups = useStore(state => state.groups);
   const expenses = useStore(state => state.expenses);
+  const currency = useStore(state => state.currency);
 
   const getGroupTotal = (groupId: string) =>
     expenses
@@ -30,7 +32,7 @@ export default function GroupsScreen({ navigation }: any) {
           renderItem={({ item }) => (
             <List.Item
               title={item.name}
-              description={`${item.members.length} member${item.members.length !== 1 ? 's' : ''} · $${getGroupTotal(item.id).toFixed(2)} total`}
+              description={`${item.members.length} member${item.members.length !== 1 ? 's' : ''} · ${formatAmount(getGroupTotal(item.id), currency)} total`}
               left={props => (
                 <List.Icon
                   {...props}

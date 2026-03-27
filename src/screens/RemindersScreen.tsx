@@ -3,15 +3,15 @@ import { View, StyleSheet, FlatList } from 'react-native';
 import { List, Button, Chip, Divider, Text } from 'react-native-paper';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
+import { formatAmount } from '../utils/currency';
 
 const isOverdue = (dueDate: string) => new Date(dueDate) < new Date();
 
 export default function RemindersScreen({ navigation }: any) {
   const { theme } = useAppTheme();
-  const { bills, markBillHandled } = useStore(state => ({
-    bills: state.bills,
-    markBillHandled: state.markBillHandled,
-  }));
+  const bills = useStore(state => state.bills);
+  const markBillHandled = useStore(state => state.markBillHandled);
+  const currency = useStore(state => state.currency);
 
   const pending = bills.filter(b => b.status === 'pending');
 
@@ -36,7 +36,7 @@ export default function RemindersScreen({ navigation }: any) {
             return (
               <List.Item
                 title={item.title}
-                description={`Due: ${new Date(item.dueDate).toLocaleDateString()} · $${item.amount.toFixed(2)}`}
+                description={`Due: ${new Date(item.dueDate).toLocaleDateString()} · ${formatAmount(item.amount, currency)}`}
                 left={props => (
                   <List.Icon
                     {...props}

@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Surface, Button, Chip, Divider, List } from 'react-native-paper';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
+import { formatAmount } from '../utils/currency';
 
 const STATUS_CONFIG = {
   pending: { color: '#FFAA00', icon: 'clock-outline' },
@@ -13,10 +14,9 @@ const STATUS_CONFIG = {
 export default function BillDetailScreen({ route, navigation }: any) {
   const { billId } = route.params;
   const { theme } = useAppTheme();
-  const { bills, markBillHandled } = useStore(state => ({
-    bills: state.bills,
-    markBillHandled: state.markBillHandled,
-  }));
+  const bills = useStore(state => state.bills);
+  const markBillHandled = useStore(state => state.markBillHandled);
+  const currency = useStore(state => state.currency);
 
   const bill = bills.find(b => b.id === billId);
 
@@ -40,7 +40,7 @@ export default function BillDetailScreen({ route, navigation }: any) {
           {bill.category}
         </Text>
         <Text variant="displaySmall" style={styles.heroAmount}>
-          ${bill.amount.toFixed(2)}
+          {formatAmount(bill.amount, currency)}
         </Text>
         <Text variant="titleMedium" style={styles.heroTitle}>
           {bill.title}

@@ -40,3 +40,20 @@ export interface ActivityEntry {
   detail: string;
   timestamp: string;
 }
+
+export interface LocalUser {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+}
+
+export interface CurrentUser {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  bio?: string;
+  profilePic?: string; // base64 data URL stored in MongoDB
+  currency?: string;
+}

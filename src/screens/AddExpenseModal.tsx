@@ -6,11 +6,13 @@ import { useAppTheme } from '../context/ThemeContext';
 import { SplitSelector } from '../components/SplitSelector';
 import { SplitMethod } from '../types';
 import { validateExpense } from '../utils/validation';
+import { getCurrencyIcon, getSymbol } from '../utils/currency';
 
 export default function AddExpenseModal({ navigation, route }: any) {
   const groupId = route?.params?.groupId || 'default-group';
   const { theme } = useAppTheme();
   const addExpense = useStore(state => state.addExpense);
+  const currency = useStore(state => state.currency);
 
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
@@ -42,13 +44,13 @@ export default function AddExpenseModal({ navigation, route }: any) {
       keyboardShouldPersistTaps="handled"
     >
       <TextInput
-        label="Amount"
+        label={`Amount (${getSymbol(currency)})`}
         mode="outlined"
         keyboardType="decimal-pad"
         value={amount}
         onChangeText={setAmount}
         onBlur={() => setTouched(true)}
-        left={<TextInput.Icon icon="currency-usd" />}
+        left={<TextInput.Icon icon={getCurrencyIcon(currency)} />}
         error={touched && !!amount && isNaN(Number(amount))}
         style={styles.input}
       />

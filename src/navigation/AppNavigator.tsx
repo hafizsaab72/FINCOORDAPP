@@ -7,6 +7,7 @@ import BillsScreen from '../screens/BillsScreen';
 import ActivityScreen from '../screens/ActivityScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import RemindersScreen from '../screens/RemindersScreen';
+import FriendsScreen from '../screens/FriendsScreen';
 import { useAppTheme } from '../context/ThemeContext';
 
 const Tab = createBottomTabNavigator();
@@ -51,6 +52,11 @@ export default function AppNavigator() {
         name="Reminders"
         component={RemindersScreen}
         options={{ tabBarIcon: tabIcon('bell', 'bell-outline') }}
+      />
+      <Tab.Screen
+        name="Friends"
+        component={FriendsScreen}
+        options={{ tabBarIcon: tabIcon('account-multiple', 'account-multiple-outline') }}
       />
       <Tab.Screen
         name="Activity"

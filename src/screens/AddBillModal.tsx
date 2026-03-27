@@ -3,10 +3,12 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { TextInput, Button, Text, Switch, HelperText } from 'react-native-paper';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
+import { getCurrencyIcon, getSymbol } from '../utils/currency';
 
 export default function AddBillModal({ navigation }: any) {
   const { theme } = useAppTheme();
   const addBill = useStore(state => state.addBill);
+  const currency = useStore(state => state.currency);
 
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
@@ -62,12 +64,12 @@ export default function AddBillModal({ navigation }: any) {
       )}
 
       <TextInput
-        label="Amount"
+        label={`Amount (${getSymbol(currency)})`}
         mode="outlined"
         keyboardType="decimal-pad"
         value={amount}
         onChangeText={setAmount}
-        left={<TextInput.Icon icon="currency-usd" />}
+        left={<TextInput.Icon icon={getCurrencyIcon(currency)} />}
         error={amountError}
         style={styles.input}
       />

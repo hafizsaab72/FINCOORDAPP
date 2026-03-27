@@ -3,13 +3,14 @@ import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, Surface, FAB, Divider, List, Icon } from 'react-native-paper';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
+import { formatAmount } from '../utils/currency';
 
 export default function GroupDetailScreen({ route, navigation }: any) {
   const { groupId, groupName } = route.params;
   const { theme } = useAppTheme();
-  const expenses = useStore(state =>
-    state.expenses.filter(e => e.groupId === groupId),
-  );
+  const allExpenses = useStore(state => state.expenses);
+  const expenses = allExpenses.filter(e => e.groupId === groupId);
+  const currency = useStore(state => state.currency);
 
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
 
@@ -23,7 +24,7 @@ export default function GroupDetailScreen({ route, navigation }: any) {
           {groupName || 'Group'} · Total Expenses
         </Text>
         <Text variant="displaySmall" style={styles.balanceAmount}>
-          ${totalExpenses.toFixed(2)}
+          {formatAmount(totalExpenses, currency)}
         </Text>
         <View style={styles.balanceFooter}>
           <Icon source="chart-bar" size={16} color="rgba(255,255,255,0.7)" />
@@ -58,7 +59,7 @@ export default function GroupDetailScreen({ route, navigation }: any) {
             )}
             right={() => (
               <Text variant="titleSmall" style={[styles.amount, { color: theme.text }]}>
-                ${item.amount.toFixed(2)}
+                {formatAmount(item.amount, currency)}
               </Text>
             )}
             style={{ backgroundColor: theme.background }}
