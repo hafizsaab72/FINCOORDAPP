@@ -84,6 +84,12 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        // NDK 23+ deprecated x86; exclude it to prevent CMake build failures.
+        // arm64-v8a  → modern physical devices + Apple Silicon emulators
+        // x86_64     → Intel/AMD emulators (AVD on Intel/AMD host machines)
+        ndk {
+            abiFilters "arm64-v8a", "x86_64"
+        }
     }
     signingConfigs {
         debug {

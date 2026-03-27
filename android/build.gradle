@@ -19,3 +19,15 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+// async-storage v3 ships storage-android as a local Maven repo that is NOT on
+// Maven Central. allprojects additively injects this repo into every subproject
+// (including the async-storage module itself), so its own per-project repo
+// declarations do not block resolution.
+allprojects {
+    repositories {
+        maven {
+            url("$rootDir/../node_modules/@react-native-async-storage/async-storage/android/local_repo")
+        }
+    }
+}
