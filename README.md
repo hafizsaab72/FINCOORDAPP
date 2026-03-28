@@ -6,110 +6,140 @@ FinCoord is a React Native application for shared expense management, bill track
 
 ## Features
 
-- **Authentication** — Sign up, sign in, guest mode. JWT-based sessions persist across launches; app reopens directly to the last state.
-- **User Profile** — Edit name, phone, bio, and profile photo (stored as base64 in MongoDB).
-- **Multi-Currency** — 14 currencies selectable from Settings, synced to and from the backend.
-- **Shared Ledger** — Record group expenses with Equal, Percentage, or Custom split logic.
-- **Bill Memory** — Track one-time and recurring bills with status tracking.
-- **Reminder Engine** — Notification scheduling (stubbed; ready for `@notifee/react-native`).
-- **Friends** — Search users, send/accept/reject friend requests, invite via WhatsApp, SMS, or share sheet.
-- **Deep Links** — `fincoord://invite?ref=<userId>` routes to the InviteScreen to add a friend.
-- **App Icon** — Custom branded icon (v2): green gradient + white badge circle + bold "F" monogram. Applied to iOS and Android. Source SVGs and all export sizes stored in `../FinCoordIcons/`.
-- **Splash Screen** — Branded splash on both platforms: green background, white badge, "FinCoord" title, and tagline shown while the app loads.
-- **Green-First UI** — MD3 Paper theme: `#0F7A5B` (Light) / `#19A874` (Dark).
-- **Offline-First** — Full data persistence via Zustand + AsyncStorage.
-- **Dark Mode** — System-synced, toggleable from Settings.
+### Authentication
+- **Email + Password** — Register and sign in with email/password.
+- **Phone OTP** — Sign in via Firebase Phone Auth. Country picker (flag + dial code) handles E.164 formatting automatically.
+- **Guest Mode** — Try the app without creating an account.
+- **Session Persistence** — JWT tokens persist across launches; app reopens to last state.
+- **Phone → Email upgrade** — Phone-only users can add an email and password from the Profile screen.
+
+### FinCoord Pro
+- `<ProGate>` component locks Pro features with a blurred upgrade prompt.
+- Upgrade screen listing Pro benefits; "Upgrade" enables Pro locally (RevenueCat ready).
+- Pro badge in Settings with crown icon.
+
+### Spending Analytics *(Pro)*
+- Bar chart: monthly spending over the last 6 months.
+- Donut chart: spending breakdown by category.
+- Top payers per group.
+- Free users see summary cards; charts are Pro-gated.
+
+### Expense Search
+- Full-text search across expenses and bills.
+- Filter by amount range and category; sort by newest, oldest, or highest amount.
+
+### Data Export *(Pro)*
+- Export all expenses and bills to CSV via the native share sheet.
+
+### Receipt OCR
+- Scan a receipt from AddExpenseModal; backend runs Tesseract.js OCR to extract amount, merchant, and date.
+- Auto-fills the expense form; falls back gracefully if parsing fails.
+
+### Real-Time Currency Conversion
+- Live exchange rates from ExchangeRate-API, cached 24 h in Zustand.
+- AddExpenseModal shows "≈ X [home currency]" as you type.
+
+### Default Split Templates
+- Save a default split method per group. AddExpenseModal pre-fills it automatically.
+
+### Push Notifications
+- Firebase Cloud Messaging (Android) + APNs (iOS).
+- Foreground and background handlers via `@react-native-firebase/messaging` + `@notifee/react-native`.
+- Notifications sent on: friend request received, friend request accepted.
+- FCM device token registered to backend on login.
+
+### Friends & Invites
+- Search users by name/phone/email.
+- Send, accept, and reject friend requests with push notifications.
+- Invite via WhatsApp, SMS, or share sheet (`fincoord://invite?ref=<userId>`).
+
+### Shared Ledger
+- Group expenses with Equal, Percentage, or Custom split logic.
+- Balance summaries per group.
+
+### Bills & Reminders
+- Track one-time and recurring bills (pending / handled / overdue).
+- Bill detail view with mark-as-handled action.
+
+### Multi-Currency
+- 14 currencies selectable from Settings, synced to/from the backend.
+
+### UI & UX
+- **Green-First MD3 theme**: `#0F7A5B` (Light) / `#19A874` (Dark). Dark mode system-synced and toggleable.
+- Country picker component: flag emoji + dial code + searchable modal sheet; used on auth and profile screens.
+- Fully scrollable screens with keyboard-avoidance on iOS and Android.
+- Custom app icon (v3): bold white "F" on green gradient. Custom splash screen on both platforms.
 
 ---
 
 ## Tech Stack
 
-| Layer | Library |
+| Layer | Technology |
 |---|---|
-| Framework | React Native 0.84 (New Architecture) + TypeScript |
+| Framework | React Native 0.84 (New Architecture / Fabric) + TypeScript |
 | Navigation | React Navigation v7 (Stack + Bottom Tabs) |
 | UI | React Native Paper v5 (MD3) + Vector Icons |
-| State | Zustand v5 (with Persist middleware) |
-| Storage | AsyncStorage v3 |
-| Image Picker | react-native-image-picker v7 |
+| State | Zustand v5 + AsyncStorage (offline-first) |
+| Auth (client) | `@react-native-firebase/auth` (Phone OTP) |
+| Push | `@react-native-firebase/messaging` + `@notifee/react-native` |
+| Charts | `react-native-gifted-charts` |
+| Image Picker | `react-native-image-picker` |
 | Backend | FinCoordAPI (Express + MongoDB Atlas) |
-| Notifications | Stubbed (`src/utils/notifications.ts`) |
 
 ---
 
-## Folder Structure
+## Project Structure
 
 ```
-/FinCoordApp
-├── App.tsx                  # Providers: SafeArea, Theme, Paper, Navigation + deep link config
-└── /src
-    ├── /constants           # paperTheme.ts (MD3 overrides), config.ts (API base URL)
-    ├── /context             # ThemeContext — useAppTheme() hook, toggleTheme()
-    ├── /navigation          # RootNavigator (Stack + Modals), AppNavigator (Bottom Tabs)
-    ├── /screens             # All screens and modals (see below)
-    ├── /services            # api.ts, authService.ts, friendsService.ts
-    ├── /store               # useStore.ts — Zustand store with balance hooks
-    ├── /types               # index.ts — Expense, Bill, Group, ActivityEntry, CurrentUser
-    └── /utils               # currency.ts, validation.ts, notifications.ts
+src/
+├── components/     CountryCodePicker, ProGate
+├── constants/      paperTheme.ts, config.ts (API base URL)
+├── context/        ThemeContext — useAppTheme(), toggleTheme()
+├── navigation/     RootNavigator (stack + modals), AppNavigator (bottom tabs)
+├── screens/        Home, Groups, GroupDetail, Bills, BillDetail, Reminders,
+│                   Friends, Invite, Activity, Analytics, Search, Settings,
+│                   Profile, Upgrade, SignIn, SignUp, Welcome,
+│                   AddExpenseModal, AddBillModal, CreateGroupModal
+├── services/       api, authService, currencyService, notificationService, friendsService
+├── store/          useStore.ts — Zustand store with balance hooks
+├── types/          index.ts — Expense, Bill, Group, ActivityEntry, CurrentUser, SplitTemplate
+└── utils/          countries, exportData, notifications
 ```
-
-### Screens
-
-| Screen | Route | Notes |
-|---|---|---|
-| WelcomeScreen | `/Welcome` | Create Account / Sign In / Guest |
-| SignInScreen | Stack | Email + password login, no header |
-| SignUpScreen | Stack | Name, email, password registration, no header |
-| HomeScreen | Tab: Home | Balance summary, recent activity, user greeting |
-| GroupsScreen | Tab: Groups | Store-backed group list |
-| GroupDetailScreen | Stack | Members, expense list, add expense FAB |
-| BillsScreen | Tab: Bills | Upcoming & overdue bills |
-| BillDetailScreen | Stack | Full bill info, mark handled |
-| RemindersScreen | Tab: Reminders | Filtered upcoming bills |
-| FriendsScreen | Tab: Friends | Search, add friends, view requests, invite |
-| ActivityScreen | Tab: Activity | Store-backed activity feed |
-| SettingsScreen | Tab: Settings | Currency, dark mode, profile link, clear/delete |
-| ProfileScreen | Stack | Edit name, phone, bio, profile photo |
-| InviteScreen | Stack | Deep link landing page — add friend from invite link |
-| AddExpenseModal | Modal | Split method selector, group-aware |
-| AddBillModal | Modal | Category, due date, recurrence |
-| CreateGroupModal | Modal | Name + member invite |
 
 ---
 
-## Installation
+## Getting Started
 
 ```bash
 npm install
-```
+cd ios && pod install && cd ..   # iOS only
 
-**iOS (macOS only):**
-```bash
-cd ios && pod install && cd ..
-```
-
-**Run:**
-```bash
 npx react-native run-android
 npx react-native run-ios
 ```
+
+### Firebase Setup (Phone Auth + Push Notifications)
+
+1. Create a project at [console.firebase.google.com](https://console.firebase.google.com).
+2. Enable **Phone** sign-in under Authentication.
+3. **Android** — Add Android app (package `com.fincoordapp`) → download `google-services.json` → place at `android/app/google-services.json`.
+4. **iOS** — Add iOS app → download `GoogleService-Info.plist` → place at `ios/FinCoordApp/GoogleService-Info.plist`.
+5. Upgrade Firebase project to **Blaze plan** (required for Phone Auth in production).
+6. **Testing without billing** — Add test numbers in Firebase Console → Authentication → Phone → *Phone numbers for testing* (e.g. `+91 9999999999` / OTP `123456`).
 
 ---
 
 ## Backend
 
-This app connects to **FinCoordAPI** (Express + MongoDB Atlas).
-
-The API base URL is configured in `src/constants/config.ts`:
+This app connects to **FinCoordAPI** (see companion repo). The API base URL is set in `src/constants/config.ts`:
 
 ```ts
-// Android emulator → 10.0.2.2 maps to host machine's localhost
-// iOS simulator   → localhost works directly
+// Android emulator: 10.0.2.2 → host machine localhost
+// iOS simulator:    localhost
 const HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
 export const API_URL = `http://${HOST}:3000/api`;
 ```
 
-Start the API server before running the app:
 ```bash
 cd ../FinCoordAPI && npm run dev
 ```
@@ -118,49 +148,20 @@ cd ../FinCoordAPI && npm run dev
 
 ## Deep Links
 
-The app handles the `fincoord://` custom URI scheme.
-
-| URL | Screen |
+| URL | Destination |
 |---|---|
-| `fincoord://invite?ref=<userId>` | InviteScreen |
-
-**Android** — Intent filter declared in `AndroidManifest.xml`.
-**iOS** — URL scheme declared in `Info.plist` under `CFBundleURLTypes`.
-
----
-
-## App Icon
-
-Custom branded icon stored at `../FinCoordIcons/` (outside the app directory for reuse).
-
-| Folder | Contents |
-|---|---|
-| `store/icon-1024.png` | iOS App Store submission |
-| `store/icon-512.png` | Google Play Store submission |
-| `ios/` | All required iOS sizes (20–180pt) |
-| `android/` | mdpi → xxxhdpi PNGs |
-
-**Design v2:** Rich green gradient background, white circular badge, bold dark-green "F" lettermark — clean, readable at all sizes.
-
-Source SVGs: `../FinCoordIcons/source/icon.svg` (rounded, for iOS) and `icon-square.svg` (flat, for Android). Edit and re-run `rsvg-convert` to regenerate all sizes.
-
-### Splash Screen
-
-| Platform | Implementation |
-|---|---|
-| iOS | `LaunchScreen.storyboard` — green bg, white badge + "F", "FinCoord" title, tagline |
-| Android | `res/drawable/launch_background.xml` + `SplashTheme` in `styles.xml`; `MainActivity.kt` restores `AppTheme` before React Native renders |
+| `fincoord://invite?ref=<userId>` | InviteScreen — add friend from invite link |
 
 ---
 
 ## Theme Tokens
 
-| Token | Light | Dark | Usage |
-|---|---|---|---|
-| Primary | `#0F7A5B` | `#19A874` | Buttons, active states |
-| Background | `#FFFFFF` | `#121212` | App surface |
-| Surface | `#F5FBF8` | `#1A1A1A` | Cards, panels, modals |
-| Border | `#C9E6D9` | `#2A2A2A` | Dividers, inputs |
+| Token | Light | Dark |
+|---|---|---|
+| Primary | `#0F7A5B` | `#19A874` |
+| Background | `#FFFFFF` | `#121212` |
+| Surface | `#F5FBF8` | `#1A1A1A` |
+| Border | `#C9E6D9` | `#2A2A2A` |
 
 ---
 
@@ -173,25 +174,16 @@ Source SVGs: `../FinCoordIcons/source/icon.svg` (rounded, for iOS) and `icon-squ
   groups: Group[];
   activities: ActivityEntry[];
   isGuest: boolean;
-  currency: string;         // ISO 4217 code e.g. 'INR'
+  currency: string;
+  isPro: boolean;
+  splitTemplates: Record<string, SplitTemplate>;
+  exchangeRates: Record<string, number>;
   currentUser: CurrentUser | null;
   token: string | null;
-  _hasHydrated: boolean;    // false until AsyncStorage restore completes
-
-  // Actions
-  addExpense(e): void;
-  addBill(b): void;
-  addGroup(g): void;
-  markBillHandled(id): void;
-  setGuestStatus(v): void;
-  setCurrency(code): void;
-  setAuth(user, token): void;
-  updateCurrentUser(partial): void;
-  signOut(): void;
-  clearData(): void;
+  _hasHydrated: boolean;
 }
 ```
 
 ---
 
-**Version:** 1.3.0
+**Version:** 1.4.0
