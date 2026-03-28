@@ -1,12 +1,25 @@
-import React from 'react';
+import React, { useLayoutEffect } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, Surface, Icon } from 'react-native-paper';
+import { Text, Surface, Icon, IconButton } from 'react-native-paper';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
 import { formatAmount } from '../utils/currency';
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation }: any) {
   const { theme } = useAppTheme();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <IconButton
+          icon="magnify"
+          iconColor={theme.primary}
+          size={24}
+          onPress={() => navigation.getParent()?.navigate('Search')}
+        />
+      ),
+    });
+  }, [navigation, theme.primary]);
   const bills = useStore(state => state.bills);
   const expenses = useStore(state => state.expenses);
   const activities = useStore(state => state.activities);
@@ -18,7 +31,10 @@ export default function HomeScreen() {
   const totalSpend = expenses.reduce((sum, e) => sum + e.amount, 0);
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
+    <ScrollView
+      style={[styles.scrollRoot, { backgroundColor: theme.background }]}
+      contentContainerStyle={styles.container}
+    >
       <Text variant="titleMedium" style={[styles.greeting, { color: theme.text }]}>
         Good day{currentUser ? `, ${currentUser.name.split(' ')[0]}` : ''} 👋
       </Text>
@@ -139,7 +155,8 @@ const relativeTime = (timestamp: string) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
+  scrollRoot: { flex: 1 },
+  container: { padding: 16, paddingBottom: 32 },
   greeting: { marginBottom: 16, fontWeight: '600' },
   tilesRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   tile: {

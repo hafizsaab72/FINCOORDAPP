@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1048334417358",
+    "project_id": "fincoord-49a5a",
+    "storage_bucket": "fincoord-49a5a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1048334417358:android:6a5b8f0ac41c9dec33bf9f",
+        "android_client_info": {
+          "package_name": "com.fincoordapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAI3MPcKQs5vf2uB91EWrCw8FaQwbcC0_I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

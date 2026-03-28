@@ -53,7 +53,15 @@ export interface CurrentUser {
   name: string;
   email: string;
   phone?: string;
+  country?: string;  // ISO 3166-1 alpha-2, e.g. "GB"
   bio?: string;
   profilePic?: string; // base64 data URL stored in MongoDB
   currency?: string;
+  isPro?: boolean;
+}
+
+export interface SplitTemplate {
+  groupId: string;
+  method: SplitMethod;
+  details: Record<string, number>; // percentages or custom amounts
 }

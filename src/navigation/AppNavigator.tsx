@@ -8,6 +8,7 @@ import ActivityScreen from '../screens/ActivityScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import RemindersScreen from '../screens/RemindersScreen';
 import FriendsScreen from '../screens/FriendsScreen';
+import AnalyticsScreen from '../screens/AnalyticsScreen';
 import { useAppTheme } from '../context/ThemeContext';
 
 const Tab = createBottomTabNavigator();
@@ -36,7 +37,13 @@ export default function AppNavigator() {
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={{ tabBarIcon: tabIcon('home', 'home-outline') }}
+        options={{
+          tabBarIcon: tabIcon('home', 'home-outline'),
+          headerShown: true,
+          headerStyle: { backgroundColor: theme.background },
+          headerTintColor: theme.primary,
+          title: 'FinCoord',
+        }}
       />
       <Tab.Screen
         name="Groups"
@@ -57,6 +64,11 @@ export default function AppNavigator() {
         name="Friends"
         component={FriendsScreen}
         options={{ tabBarIcon: tabIcon('account-multiple', 'account-multiple-outline') }}
+      />
+      <Tab.Screen
+        name="Analytics"
+        component={AnalyticsScreen}
+        options={{ tabBarIcon: tabIcon('chart-bar', 'chart-bar') }}
       />
       <Tab.Screen
         name="Activity"

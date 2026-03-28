@@ -44,7 +44,8 @@ export default function AddBillModal({ navigation }: any) {
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: theme.background }]}
+      style={[styles.scrollRoot, { backgroundColor: theme.background }]}
+      contentContainerStyle={styles.container}
       keyboardShouldPersistTaps="handled"
     >
       <TextInput
@@ -129,7 +130,8 @@ export default function AddBillModal({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
+  scrollRoot: { flex: 1 },
+  container: { padding: 20, paddingBottom: 40 },
   input: { marginBottom: 4 },
   switchRow: {
     flexDirection: 'row',

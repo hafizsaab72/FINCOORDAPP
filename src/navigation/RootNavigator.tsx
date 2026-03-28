@@ -12,6 +12,8 @@ import BillDetailScreen from '../screens/BillDetailScreen';
 import CreateGroupModal from '../screens/CreateGroupModal';
 import ProfileScreen from '../screens/ProfileScreen';
 import InviteScreen from '../screens/InviteScreen';
+import UpgradeScreen from '../screens/UpgradeScreen';
+import SearchScreen from '../screens/SearchScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -28,6 +30,8 @@ export default function RootNavigator() {
       <Stack.Screen name="MainTabs" component={AppNavigator} />
       <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: true, title: 'My Profile' }} />
       <Stack.Screen name="Invite" component={InviteScreen} />
+      <Stack.Screen name="Upgrade" component={UpgradeScreen} options={{ headerShown: true, title: 'FinCoord Pro' }} />
+      <Stack.Screen name="Search" component={SearchScreen} options={{ headerShown: true, title: 'Search' }} />
 
       <Stack.Screen
         name="GroupDetail"

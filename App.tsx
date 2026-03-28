@@ -8,6 +8,7 @@ import RootNavigator from './src/navigation/RootNavigator';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useStore } from './src/store/useStore';
 import { authService } from './src/services/authService';
+import { registerDeviceToken, setupForegroundHandler } from './src/services/notificationService';
 
 function AppContent() {
   const { isDark, theme } = useAppTheme();
@@ -30,7 +31,16 @@ function AppContent() {
         // Token expired or invalid — sign out silently
         signOut();
       });
+
+    // Register FCM device token with backend
+    registerDeviceToken(token);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Wire foreground notification handler
+  useEffect(() => {
+    const cleanup = setupForegroundHandler();
+    return cleanup;
+  }, []);
 
   const linking = {
     prefixes: ['fincoord://'],

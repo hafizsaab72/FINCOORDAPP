@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, StyleSheet, FlatList, Alert, Image } from 'react-native';
+import { View, StyleSheet, FlatList, Alert, Image, ScrollView } from 'react-native';
 import { List, Switch, Button, Divider, Text, Modal, Portal, TouchableRipple } from 'react-native-paper';
 import { useAppTheme } from '../context/ThemeContext';
 import { useStore } from '../store/useStore';
 import { CURRENCIES } from '../utils/currency';
 import { authService } from '../services/authService';
+import { exportDataToCSV } from '../utils/exportData';
 
 export default function SettingsScreen({ navigation }: any) {
   const { theme, isDark, toggleTheme } = useAppTheme();
@@ -17,6 +18,9 @@ export default function SettingsScreen({ navigation }: any) {
   const currentUser = useStore(state => state.currentUser);
   const isGuest = useStore(state => state.isGuest);
   const signOut = useStore(state => state.signOut);
+  const isPro = useStore(state => state.isPro);
+  const expenses = useStore(state => state.expenses);
+  const bills = useStore(state => state.bills);
 
   const selectedCurrency = CURRENCIES.find(c => c.code === currency) ?? CURRENCIES[0];
 
@@ -75,7 +79,10 @@ export default function SettingsScreen({ navigation }: any) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <ScrollView
+      style={[styles.scrollRoot, { backgroundColor: theme.background }]}
+      contentContainerStyle={styles.container}
+    >
       <Text variant="titleMedium" style={[styles.sectionLabel, { color: '#888' }]}>
         APPEARANCE
       </Text>
@@ -105,6 +112,34 @@ export default function SettingsScreen({ navigation }: any) {
           titleStyle={{ color: theme.text }}
           descriptionStyle={{ color: '#888' }}
         />
+      </View>
+
+      <Text variant="titleMedium" style={[styles.sectionLabel, { color: '#888' }]}>
+        FINCOORD PRO
+      </Text>
+      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <List.Item
+          title={isPro ? 'FinCoord Pro · Active' : 'Upgrade to Pro'}
+          description={isPro ? 'All features unlocked' : 'Analytics, export, OCR & more'}
+          left={props => <List.Icon {...props} icon="crown" color="#FFD700" />}
+          right={props => !isPro && <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => navigation.getParent()?.navigate('Upgrade')}
+          titleStyle={{ color: theme.text, fontWeight: '600' }}
+          descriptionStyle={{ color: '#888' }}
+        />
+        {isPro && (
+          <>
+            <Divider />
+            <List.Item
+              title="Export Data"
+              description="Download expenses & bills as CSV"
+              left={props => <List.Icon {...props} icon="file-export-outline" color={theme.primary} />}
+              onPress={() => exportDataToCSV(expenses, bills)}
+              titleStyle={{ color: theme.text }}
+              descriptionStyle={{ color: '#888' }}
+            />
+          </>
+        )}
       </View>
 
       <Text variant="titleMedium" style={[styles.sectionLabel, { color: '#888' }]}>
@@ -248,12 +283,13 @@ export default function SettingsScreen({ navigation }: any) {
           </Button>
         </Modal>
       </Portal>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
+  scrollRoot: { flex: 1 },
+  container: { padding: 16, paddingBottom: 40 },
   sectionLabel: { marginBottom: 8, marginTop: 16, fontSize: 11, letterSpacing: 1 },
   card: { borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
   profileRow: {

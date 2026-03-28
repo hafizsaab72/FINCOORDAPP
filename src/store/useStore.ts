@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Expense, Bill, Group, ActivityEntry, CurrentUser } from '../types';
+import { Expense, Bill, Group, ActivityEntry, CurrentUser, SplitTemplate } from '../types';
 
 interface AppState {
   expenses: Expense[];
@@ -12,6 +12,10 @@ interface AppState {
   currency: string;
   currentUser: CurrentUser | null;
   token: string | null;
+  isPro: boolean;
+  splitTemplates: Record<string, SplitTemplate>;
+  exchangeRates: Record<string, number>;
+  ratesLastFetched: number;
 
   _hasHydrated: boolean;
 
@@ -25,6 +29,9 @@ interface AppState {
   updateCurrentUser: (patch: Partial<CurrentUser>) => void;
   signOut: () => void;
   clearData: () => void;
+  setIsPro: (value: boolean) => void;
+  setSplitTemplate: (template: SplitTemplate) => void;
+  setExchangeRates: (rates: Record<string, number>) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -38,6 +45,10 @@ export const useStore = create<AppState>()(
       currency: 'USD',
       currentUser: null,
       token: null,
+      isPro: false,
+      splitTemplates: {},
+      exchangeRates: {},
+      ratesLastFetched: 0,
       _hasHydrated: false,
 
       addExpense: expense =>
@@ -116,6 +127,15 @@ export const useStore = create<AppState>()(
 
       clearData: () =>
         set({ expenses: [], bills: [], groups: [], activities: [] }),
+
+      setIsPro: value => set({ isPro: value }),
+
+      setSplitTemplate: template =>
+        set(state => ({
+          splitTemplates: { ...state.splitTemplates, [template.groupId]: template },
+        })),
+
+      setExchangeRates: rates => set({ exchangeRates: rates, ratesLastFetched: Date.now() }),
     }),
     {
       name: 'fin-coord-storage',
@@ -129,6 +149,10 @@ export const useStore = create<AppState>()(
         currency: state.currency,
         currentUser: state.currentUser,
         token: state.token,
+        isPro: state.isPro,
+        splitTemplates: state.splitTemplates,
+        exchangeRates: state.exchangeRates,
+        ratesLastFetched: state.ratesLastFetched,
       }),
       onRehydrateStorage: () => () => {
         useStore.setState({ _hasHydrated: true });
