@@ -7,13 +7,8 @@ import SignInScreen from '../screens/SignInScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import AddExpenseModal from '../screens/AddExpenseModal';
 import AddBillModal from '../screens/AddBillModal';
-import GroupDetailScreen from '../screens/GroupDetailScreen';
-import BillDetailScreen from '../screens/BillDetailScreen';
 import CreateGroupModal from '../screens/CreateGroupModal';
-import ProfileScreen from '../screens/ProfileScreen';
-import InviteScreen from '../screens/InviteScreen';
-import UpgradeScreen from '../screens/UpgradeScreen';
-import SearchScreen from '../screens/SearchScreen';
+import SettleUpModal from '../screens/SettleUpModal';
 
 const Stack = createNativeStackNavigator();
 
@@ -28,26 +23,12 @@ export default function RootNavigator() {
       <Stack.Screen name="SignIn" component={SignInScreen} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />
       <Stack.Screen name="MainTabs" component={AppNavigator} />
-      <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: true, title: 'My Profile' }} />
-      <Stack.Screen name="Invite" component={InviteScreen} />
-      <Stack.Screen name="Upgrade" component={UpgradeScreen} options={{ headerShown: true, title: 'FinCoord Pro' }} />
-      <Stack.Screen name="Search" component={SearchScreen} options={{ headerShown: true, title: 'Search' }} />
 
-      <Stack.Screen
-        name="GroupDetail"
-        component={GroupDetailScreen}
-        options={{ headerShown: true, title: 'Group Detail' }}
-      />
-      <Stack.Screen
-        name="BillDetail"
-        component={BillDetailScreen}
-        options={{ headerShown: true, title: 'Bill Detail' }}
-      />
-
-      <Stack.Group screenOptions={{ presentation: 'modal', headerShown: true }}>
-        <Stack.Screen name="AddExpenseModal" component={AddExpenseModal} options={{ title: 'Add Expense' }} />
+      <Stack.Group screenOptions={{ presentation: 'modal', headerShown: false }}>
+        <Stack.Screen name="AddExpenseModal" component={AddExpenseModal} />
         <Stack.Screen name="AddBillModal" component={AddBillModal} options={{ title: 'Add Bill' }} />
         <Stack.Screen name="CreateGroupModal" component={CreateGroupModal} options={{ title: 'Create Group' }} />
+        <Stack.Screen name="SettleUpModal" component={SettleUpModal} />
       </Stack.Group>
     </Stack.Navigator>
   );
