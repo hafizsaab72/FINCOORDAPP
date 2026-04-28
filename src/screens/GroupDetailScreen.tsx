@@ -396,50 +396,38 @@ export default function GroupDetailScreen({ route, navigation }: any) {
         style={[styles.actionBar, { borderBottomColor: theme.border }]}
         contentContainerStyle={styles.actionBarContent}
       >
-        <Button
-          mode="contained"
-          buttonColor="#E8673A"
-          textColor="#FFF"
+        <TouchableOpacity
+          style={[styles.actionPill, { backgroundColor: '#E8673A' }]}
           onPress={() => navigation.navigate('SettleUpModal', {
             groupId,
             groupName: name,
             members: balances?.memberBalances ?? [],
           })}
-          style={styles.actionPill}
-          labelStyle={styles.actionPillText}
         >
-          Settle up
-        </Button>
-        <Button
-          mode="outlined"
-          icon="chart-bar"
+          <Icon source="account-check" size={16} color="#FFF" />
+          <Text style={styles.actionPillText}>Settle up</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionBtn, { borderColor: theme.border }]}
           onPress={() => navigation.navigate('Analytics')}
-          style={[styles.actionBtn, { borderColor: theme.border }]}
-          textColor={theme.text}
-          labelStyle={styles.actionBtnText}
         >
-          Charts
-        </Button>
-        <Button
-          mode="outlined"
-          icon="scale-balance"
+          <Icon source="chart-bar" size={16} color={theme.text} />
+          <Text style={[styles.actionBtnText, { color: theme.text }]}>Charts</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionBtn, { borderColor: theme.border }]}
           onPress={() => { setBalancesModalTab('balances'); setBalancesModalVisible(true); }}
-          style={[styles.actionBtn, { borderColor: theme.border }]}
-          textColor={theme.text}
-          labelStyle={styles.actionBtnText}
         >
-          Balances
-        </Button>
-        <Button
-          mode="outlined"
-          icon="sigma"
+          <Icon source="scale-balance" size={16} color={theme.text} />
+          <Text style={[styles.actionBtnText, { color: theme.text }]}>Balances</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionBtn, { borderColor: theme.border }]}
           onPress={() => { setBalancesModalTab('totals'); setBalancesModalVisible(true); }}
-          style={[styles.actionBtn, { borderColor: theme.border }]}
-          textColor={theme.text}
-          labelStyle={styles.actionBtnText}
         >
-          Totals
-        </Button>
+          <Icon source="sigma" size={16} color={theme.text} />
+          <Text style={[styles.actionBtnText, { color: theme.text }]}>Totals</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Expense list grouped by month */}
@@ -450,7 +438,7 @@ export default function GroupDetailScreen({ route, navigation }: any) {
         renderSectionHeader={renderSectionHeader}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Icon source="receipt-outline" size={56} color="#CCC" />
+            <Icon source="receipt" size={56} color="#CCC" />
             <Text variant="bodyMedium" style={{ color: '#999', marginTop: 12, textAlign: 'center' }}>
               No expenses yet.{'\n'}Tap + to add the first one.
             </Text>
@@ -723,6 +711,7 @@ const styles = StyleSheet.create({
   },
   actionBarContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center' },
   actionPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 18, paddingVertical: 7, borderRadius: 20,
   },
   actionPillText: { color: '#FFF', fontWeight: '600', fontSize: 13 },
