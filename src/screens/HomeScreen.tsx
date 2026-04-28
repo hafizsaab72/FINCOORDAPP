@@ -116,7 +116,7 @@ export default function HomeScreen({ navigation }: any) {
               border={theme.border}
             />
             <SummaryCard
-              icon="receipt-clock"
+              icon="clock-outline"
               label="Pending Bills"
               value={`${pendingBills.length}`}
               accent="#FFAA00"
@@ -176,14 +176,23 @@ export default function HomeScreen({ navigation }: any) {
           ) : (
             activities.slice(0, 5).map(entry => (
               <View key={entry.id} style={[styles.activityRow, { borderBottomColor: theme.border }]}>
-                <Icon source={getActivityIcon(entry.action)} size={20} color={theme.primary} />
+                <View style={[styles.activityIconBox, { backgroundColor: getActivityColor(entry.action) + '18' }]}>
+                  <Icon source={getActivityIcon(entry.action)} size={18} color={getActivityColor(entry.action)} />
+                </View>
                 <View style={styles.activityText}>
-                  <Text variant="bodyMedium" style={{ color: theme.text }}>{entry.action}</Text>
+                  <Text variant="bodyMedium" style={{ color: theme.text, fontWeight: '500' }}>{entry.action}</Text>
                   <Text variant="bodySmall" style={{ color: theme.textSecondary }}>{entry.detail}</Text>
                 </View>
-                <Text variant="bodySmall" style={{ color: theme.textSecondary }}>
-                  {relativeTime(entry.timestamp)}
-                </Text>
+                <View style={{ alignItems: 'flex-end' }}>
+                  {entry.amount !== undefined && (
+                    <Text variant="bodyMedium" style={{ color: theme.text, fontWeight: '600' }}>
+                      {formatAmount(entry.amount, entry.currency || currency)}
+                    </Text>
+                  )}
+                  <Text variant="bodySmall" style={{ color: theme.textSecondary }}>
+                    {relativeTime(entry.timestamp)}
+                  </Text>
+                </View>
               </View>
             ))
           )}
@@ -346,8 +355,16 @@ const getActivityIcon = (action: string) => {
   if (action.includes('Expense'))              return 'cash-multiple';
   if (action.includes('Bill') && action.includes('Add')) return 'receipt-text-plus';
   if (action.includes('Bill') && action.includes('Handle')) return 'check-circle-outline';
-  if (action.includes('Group'))               return 'account-group';
+  if (action.includes('Member'))               return 'account-plus';
+  if (action.includes('Group'))                return 'account-group';
   return 'clock-outline';
+};
+
+const getActivityColor = (action: string) => {
+  if (action.includes('Expense'))        return '#0F7A5B';
+  if (action.includes('Bill'))           return '#FFAA00';
+  if (action.includes('Group') || action.includes('Member')) return '#5C6BC0';
+  return '#999';
 };
 
 const relativeTime = (timestamp: string) => {
@@ -390,7 +407,11 @@ const styles = StyleSheet.create({
   },
   activityRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 12, borderBottomWidth: 1,
+    paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  activityIconBox: {
+    width: 36, height: 36, borderRadius: 10,
+    justifyContent: 'center', alignItems: 'center',
   },
   activityText: { flex: 1 },
   chipRow: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },

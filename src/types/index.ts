@@ -79,6 +79,8 @@ export interface ActivityEntry {
   action: string;
   detail: string;
   timestamp: string;
+  amount?: number;
+  currency?: string;
 }
 
 export interface LocalUser {
