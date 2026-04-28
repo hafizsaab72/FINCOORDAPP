@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { TextInput, Button, Text, HelperText, SegmentedButtons, Icon } from 'react-native-paper';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
@@ -29,21 +29,30 @@ export default function SignInScreen({ navigation }: any) {
   const [otp, setOtp] = useState('');
   const [phoneStep, setPhoneStep] = useState<PhoneStep>('number');
   const confirmationRef = useRef<FirebaseAuthTypes.ConfirmationResult | null>(null);
+  const cooldownRef = useRef<NodeJS.Timeout | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [touched, setTouched] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
+  }, []);
 
   // Full E.164 number
   const fullPhone = country.dialCode + localNumber.replace(/\D/g, '');
 
   // ── Email sign-in ────────────────────────────────────────────────────────
-  const emailError = touched && !email.includes('@');
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailError = touched && !emailRegex.test(email);
   const passwordError = touched && password.length < 6;
 
   const handleEmailSignIn = async () => {
     setTouched(true);
-    if (!email.includes('@') || password.length < 6) return;
+    if (!emailRegex.test(email) || password.length < 6) return;
     setLoading(true);
     setError('');
     try {
@@ -72,6 +81,17 @@ export default function SignInScreen({ navigation }: any) {
       const confirmation = await auth().signInWithPhoneNumber(fullPhone);
       confirmationRef.current = confirmation;
       setPhoneStep('otp');
+      setResendCooldown(30);
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+      cooldownRef.current = setInterval(() => {
+        setResendCooldown(prev => {
+          if (prev <= 1) {
+            if (cooldownRef.current) clearInterval(cooldownRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -233,7 +253,9 @@ export default function SignInScreen({ navigation }: any) {
               onChangeText={t => { setOtp(t); setError(''); }}
               left={<TextInput.Icon icon="shield-key-outline" />}
               style={styles.input}
-              maxLength={8}
+              maxLength={6}
+              autoComplete="sms-otp"
+              textContentType="oneTimeCode"
             />
 
             {!!error && <HelperText type="error" visible style={styles.serverError}>{error}</HelperText>}
@@ -250,6 +272,14 @@ export default function SignInScreen({ navigation }: any) {
               Verify & Sign In
             </Button>
 
+            <Button
+              mode="text"
+              onPress={handleSendOtp}
+              disabled={resendCooldown > 0 || loading}
+              style={{ marginTop: 4 }}
+            >
+              {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : 'Resend OTP'}
+            </Button>
             <Button mode="text" onPress={resetPhone} style={{ marginTop: 4 }}>
               Change number
             </Button>
@@ -257,7 +287,7 @@ export default function SignInScreen({ navigation }: any) {
         )}
 
         <View style={styles.footer}>
-          <Text variant="bodyMedium" style={{ color: '#888' }}>
+          <Text variant="bodyMedium" style={{ color: theme.textSecondary }}>
             Don't have an account?{'  '}
           </Text>
           <Button mode="text" compact textColor={theme.primary} onPress={() => navigation.navigate('SignUp')}>

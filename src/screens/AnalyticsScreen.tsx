@@ -1,73 +1,82 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
-import { Text, Surface, Icon } from 'react-native-paper';
-import { BarChart, PieChart } from 'react-native-gifted-charts';
+import { Text, Surface, Icon, Button } from 'react-native-paper';
+import { PieChart } from 'react-native-gifted-charts';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
 import { formatAmount } from '../utils/currency';
 import ProGate from '../components/ProGate';
 
 const SCREEN_W = Dimensions.get('window').width;
-const CHART_W = SCREEN_W - 48;
 
 const CATEGORY_COLORS = ['#0F7A5B', '#19A874', '#34C88A', '#FFAA00', '#FF6B35', '#6C63FF', '#FF3B30'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-export default function AnalyticsScreen() {
+export default function AnalyticsScreen({ route }: any) {
   const { theme } = useAppTheme();
   const expenses = useStore(state => state.expenses);
   const bills = useStore(state => state.bills);
   const currency = useStore(state => state.currency);
+  const currentUser = useStore(state => state.currentUser);
+  const isPro = useStore(state => state.isPro);
 
-  // --- Current month summary ---
-  const now = new Date();
-  const thisMonthExpenses = expenses.filter(e => {
-    const d = new Date(e.date);
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  });
-  const lastMonthExpenses = expenses.filter(e => {
-    const d = new Date(e.date);
-    const lastMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
-    const lastMonthYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-    return d.getMonth() === lastMonth && d.getFullYear() === lastMonthYear;
-  });
+  const friendId = route?.params?.friendId;
+  const friendName = route?.params?.friendName;
 
-  const thisMonthTotal = thisMonthExpenses.reduce((s, e) => s + e.amount, 0);
-  const lastMonthTotal = lastMonthExpenses.reduce((s, e) => s + e.amount, 0);
-  const biggestExpense = expenses.reduce<null | { amount: number; notes: string }>(
-    (max, e) => (!max || e.amount > max.amount ? { amount: e.amount, notes: e.notes } : max),
-    null,
-  );
+  // Filter expenses to friend-specific if navigated from FriendDetail
+  const filteredExpenses = friendId
+    ? expenses.filter(e => e.payerId === friendId || Object.keys(e.splitDetails).includes(friendId))
+    : expenses;
 
-  // --- Bar chart: last 6 months ---
-  const barData = useMemo(() => {
-    return Array.from({ length: 6 }, (_, i) => {
-      const monthOffset = 5 - i;
-      const targetDate = new Date(now.getFullYear(), now.getMonth() - monthOffset, 1);
-      const total = expenses
-        .filter(e => {
-          const d = new Date(e.date);
-          return d.getMonth() === targetDate.getMonth() && d.getFullYear() === targetDate.getFullYear();
-        })
-        .reduce((s, e) => s + e.amount, 0);
-      return {
-        value: parseFloat(total.toFixed(2)),
-        label: MONTHS[targetDate.getMonth()],
-        frontColor: i === 5 ? theme.primary : theme.primary + '80',
-        topLabelComponent: total > 0
-          ? () => (
-            <Text style={{ fontSize: 8, color: theme.text, marginBottom: 2 }}>
-              {total > 999 ? `${(total / 1000).toFixed(1)}k` : total.toFixed(0)}
-            </Text>
-          )
-          : undefined,
-      };
-    });
-  }, [expenses, theme.primary, theme.text]);
+  // Build a map of user IDs to names from groups and expenses
+  const nameMap = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    if (currentUser?.id) map[currentUser.id] = currentUser.name;
+    // Resolve names from expenses participantNames
+    for (const e of expenses) {
+      if (e.participantNames) {
+        Object.assign(map, e.participantNames);
+      }
+    }
+    return map;
+  }, [expenses, currentUser]);
 
-  // --- Pie chart: by bill category ---
-  const pieData = useMemo(() => {
+  // --- Totals ---
+  const totalSpent = filteredExpenses.reduce((s, e) => s + e.amount, 0);
+
+  // Calculate user's share (what they paid + what they owe)
+  const myId = currentUser?.id ?? '';
+  const yourShare = React.useMemo(() => {
+    let share = 0;
+    for (const e of filteredExpenses) {
+      const participants = Object.keys(e.splitDetails);
+      if (participants.length === 0) continue;
+
+      let myShare = 0;
+      if (e.splitMethod === 'equal') {
+        myShare = e.amount / participants.length;
+      } else if (e.splitMethod === 'percentage') {
+        myShare = (e.amount * (e.splitDetails[myId] || 0)) / 100;
+      } else {
+        myShare = e.splitDetails[myId] || 0;
+      }
+
+      if (participants.includes(myId)) {
+        share += myShare;
+      }
+    }
+    return share;
+  }, [filteredExpenses, myId]);
+
+  const percentage = totalSpent > 0 ? Math.round((yourShare / totalSpent) * 100) : 0;
+
+  // --- Pie chart data by category ---
+  const pieData = React.useMemo(() => {
     const catMap: Record<string, number> = {};
+    for (const e of filteredExpenses) {
+      const cat = e.notes?.split(' ')[0] || 'Other';
+      catMap[cat] = (catMap[cat] || 0) + e.amount;
+    }
+    // Also include bills
     for (const b of bills) {
       catMap[b.category] = (catMap[b.category] || 0) + b.amount;
     }
@@ -79,205 +88,204 @@ export default function AnalyticsScreen() {
       text: cat,
       color: CATEGORY_COLORS[idx % CATEGORY_COLORS.length],
     }));
-  }, [bills]);
+  }, [filteredExpenses, bills]);
 
-  // --- Top spenders per group ---
-  const topSpenders = useMemo(() => {
-    const payerMap: Record<string, number> = {};
-    for (const e of expenses) {
-      payerMap[e.payerId] = (payerMap[e.payerId] || 0) + e.amount;
-    }
-    return Object.entries(payerMap)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-  }, [expenses]);
+  const chartTotal = pieData?.reduce((s, d) => s + d.value, 0) ?? 0;
 
   return (
     <ScrollView
       style={[styles.scrollRoot, { backgroundColor: theme.background }]}
       contentContainerStyle={styles.container}
     >
-      {/* Summary cards — free tier */}
-      <Text variant="titleSmall" style={[styles.sectionLabel, { color: '#888' }]}>
-        THIS MONTH
+      {friendName && (
+        <Text variant="titleSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+          WITH {friendName.toUpperCase()}
+        </Text>
+      )}
+
+      {/* Header */}
+      <Text variant="headlineMedium" style={{ color: theme.text, fontWeight: '700', marginBottom: 4 }}>
+        {friendName || 'All-time spending'}
       </Text>
-      <View style={styles.tilesRow}>
-        <SummaryTile
-          icon="trending-up"
-          label="Spent"
-          value={formatAmount(thisMonthTotal, currency)}
-          accent={theme.primary}
-          bg={theme.surface}
-          border={theme.border}
-        />
-        <SummaryTile
-          icon="trending-down"
-          label="Last Month"
-          value={formatAmount(lastMonthTotal, currency)}
-          accent="#FFAA00"
-          bg={theme.surface}
-          border={theme.border}
-        />
+      <Text variant="bodyMedium" style={{ color: theme.textSecondary, marginBottom: 20 }}>
+        All-time spending
+      </Text>
+
+      {/* Donut chart */}
+      <View style={{ alignItems: 'center', marginBottom: 24 }}>
+        {pieData && chartTotal > 0 ? (
+          <PieChart
+            data={pieData}
+            donut
+            radius={SCREEN_W * 0.28}
+            innerRadius={SCREEN_W * 0.22}
+            centerLabelComponent={() => (
+              <View style={{ alignItems: 'center' }}>
+                <Text variant="bodySmall" style={{ color: theme.textSecondary }}>Total</Text>
+                <Text variant="titleMedium" style={{ color: theme.primary, fontWeight: '700' }}>
+                  {formatAmount(chartTotal, currency)}
+                </Text>
+              </View>
+            )}
+            isAnimated
+          />
+        ) : (
+          <View style={[styles.emptyDonut, { borderColor: theme.border }]}>
+            <Text variant="bodyMedium" style={{ color: theme.textSecondary }}>No data yet</Text>
+          </View>
+        )}
       </View>
 
-      {biggestExpense && (
-        <Surface style={[styles.bigExpCard, { backgroundColor: theme.surface, borderColor: theme.border }]} elevation={0}>
-          <Icon source="fire" size={18} color="#FF6B35" />
-          <View style={styles.bigExpText}>
-            <Text variant="bodySmall" style={{ color: '#888' }}>Biggest expense</Text>
-            <Text variant="bodyMedium" style={{ color: theme.text, fontWeight: '600' }}>
-              {biggestExpense.notes || 'Unnamed'} · {formatAmount(biggestExpense.amount, currency)}
-            </Text>
-          </View>
+      {/* Total spent */}
+      <View style={styles.metricRow}>
+        <View style={[styles.metricDot, { backgroundColor: theme.primary }]} />
+        <View style={{ flex: 1 }}>
+          <Text variant="bodyMedium" style={{ color: theme.text, fontWeight: '600' }}>
+            Total spent <Icon source="information-outline" size={14} color={theme.textSecondary} />
+          </Text>
+          <Text variant="headlineSmall" style={{ color: theme.primary, fontWeight: '700', marginTop: 2 }}>
+            {formatAmount(totalSpent, currency)}
+          </Text>
+        </View>
+      </View>
+
+      {/* Your share */}
+      <View style={styles.metricRow}>
+        <View style={[styles.metricDot, { backgroundColor: theme.primary }]} />
+        <View style={{ flex: 1 }}>
+          <Text variant="bodyMedium" style={{ color: theme.text, fontWeight: '600' }}>
+            Your share <Icon source="information-outline" size={14} color={theme.textSecondary} />
+          </Text>
+          <Text variant="headlineSmall" style={{ color: theme.primary, fontWeight: '700', marginTop: 2 }}>
+            {formatAmount(yourShare, currency)}
+          </Text>
+          <Text variant="bodySmall" style={{ color: theme.textSecondary, marginTop: 2 }}>
+            {percentage}% of total group spending
+          </Text>
+        </View>
+      </View>
+
+      {/* Pro banner */}
+      {!isPro && (
+        <Surface style={[styles.proCard, { backgroundColor: theme.surface, borderColor: theme.border }]} elevation={0}>
+          <Text variant="titleMedium" style={{ color: theme.text, fontWeight: '600', textAlign: 'center' }}>
+            Pro users get more
+          </Text>
+          <Text variant="bodySmall" style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 4 }}>
+            More insights. More features. More!
+          </Text>
+          <Button
+            mode="contained"
+            style={[styles.proBtn, { backgroundColor: '#7B4FA3' }]}
+            onPress={() => { /* navigate to upgrade */ }}
+          >
+            Get FinCoord Pro
+          </Button>
         </Surface>
       )}
 
       {/* Charts — Pro only */}
       <ProGate feature="Spending Charts">
         <>
-          <Text variant="titleSmall" style={[styles.sectionLabel, { color: '#888' }]}>
-            MONTHLY SPENDING (LAST 6 MONTHS)
+          <Text variant="titleSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+            SPENDING BY CATEGORY
           </Text>
           <Surface style={[styles.chartCard, { backgroundColor: theme.surface, borderColor: theme.border }]} elevation={0}>
-            {barData.every(d => d.value === 0) ? (
-              <EmptyChart label="No expense data yet" theme={theme} />
+            {!pieData ? (
+              <EmptyChart label="No spending data yet" theme={theme} />
             ) : (
-              <BarChart
-                data={barData}
-                width={CHART_W - 32}
-                barWidth={32}
-                spacing={12}
-                roundedTop
-                roundedBottom
-                hideRules
-                xAxisThickness={1}
-                yAxisThickness={0}
-                xAxisColor={theme.border}
-                yAxisTextStyle={{ color: '#888', fontSize: 10 }}
-                xAxisLabelTextStyle={{ color: '#888', fontSize: 11 }}
-                noOfSections={4}
-                maxValue={Math.max(...barData.map(d => d.value)) * 1.2 || 100}
-                isAnimated
-              />
+              <View style={styles.legend}>
+                {pieData.map(d => (
+                  <View key={d.text} style={styles.legendRow}>
+                    <View style={[styles.legendDot, { backgroundColor: d.color }]} />
+                    <Text variant="bodySmall" style={{ color: theme.text, flex: 1 }} numberOfLines={1}>
+                      {d.text}
+                    </Text>
+                    <Text variant="bodySmall" style={{ color: theme.textSecondary }}>
+                      {formatAmount(d.value, currency)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
             )}
           </Surface>
 
-          {pieData && (
-            <>
-              <Text variant="titleSmall" style={[styles.sectionLabel, { color: '#888' }]}>
-                BILLS BY CATEGORY
-              </Text>
-              <Surface style={[styles.chartCard, { backgroundColor: theme.surface, borderColor: theme.border }]} elevation={0}>
-                <View style={styles.pieRow}>
-                  <PieChart
-                    data={pieData}
-                    donut
-                    radius={80}
-                    innerRadius={52}
-                    centerLabelComponent={() => (
-                      <Text variant="labelSmall" style={{ color: theme.text, textAlign: 'center' }}>
-                        {pieData.length}{'\n'}cats
-                      </Text>
-                    )}
-                    isAnimated
-                  />
-                  <View style={styles.legend}>
-                    {pieData.map(d => (
-                      <View key={d.text} style={styles.legendRow}>
-                        <View style={[styles.legendDot, { backgroundColor: d.color }]} />
-                        <Text variant="bodySmall" style={{ color: theme.text }} numberOfLines={1}>
-                          {d.text}
-                        </Text>
-                        <Text variant="bodySmall" style={{ color: '#888', marginLeft: 4 }}>
-                          {formatAmount(d.value, currency)}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              </Surface>
-            </>
-          )}
+          <Text variant="titleSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+            TOP PAYERS
+          </Text>
+          <Surface style={[styles.chartCard, { backgroundColor: theme.surface, borderColor: theme.border }]} elevation={0}>
+            {(() => {
+              const payerMap: Record<string, number> = {};
+              for (const e of filteredExpenses) {
+                payerMap[e.payerId] = (payerMap[e.payerId] || 0) + e.amount;
+              }
+              const topSpenders = Object.entries(payerMap)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5);
 
-          {topSpenders.length > 0 && (
-            <>
-              <Text variant="titleSmall" style={[styles.sectionLabel, { color: '#888' }]}>
-                TOP PAYERS
-              </Text>
-              <Surface style={[styles.chartCard, { backgroundColor: theme.surface, borderColor: theme.border }]} elevation={0}>
-                {topSpenders.map(([payerId, total], idx) => (
+              return topSpenders.length === 0 ? (
+                <EmptyChart label="No payer data yet" theme={theme} />
+              ) : (
+                topSpenders.map(([payerId, total], idx) => (
                   <View key={payerId} style={[styles.spenderRow, idx > 0 && { borderTopWidth: 1, borderTopColor: theme.border }]}>
                     <View style={[styles.rankBadge, { backgroundColor: theme.primary + '20' }]}>
                       <Text variant="labelSmall" style={{ color: theme.primary, fontWeight: 'bold' }}>
                         #{idx + 1}
                       </Text>
                     </View>
-                    <Text variant="bodyMedium" style={{ color: theme.text, flex: 1 }}>
-                      {payerId}
+                    <Text variant="bodyMedium" style={{ color: theme.text, flex: 1 }} numberOfLines={1}>
+                      {nameMap[payerId] || payerId}
                     </Text>
                     <Text variant="titleSmall" style={{ color: theme.primary, fontWeight: '600' }}>
                       {formatAmount(total, currency)}
                     </Text>
                   </View>
-                ))}
-              </Surface>
-            </>
-          )}
+                ))
+              );
+            })()}
+          </Surface>
         </>
       </ProGate>
     </ScrollView>
   );
 }
 
-function SummaryTile({
-  icon, label, value, accent, bg, border,
-}: {
-  icon: string; label: string; value: string; accent: string; bg: string; border: string;
-}) {
-  return (
-    <Surface style={[styles.tile, { backgroundColor: bg, borderColor: border }]} elevation={0}>
-      <Icon source={icon} size={22} color={accent} />
-      <Text variant="bodySmall" style={{ color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-        {label}
-      </Text>
-      <Text variant="titleMedium" style={{ color: accent, fontWeight: 'bold' }}>{value}</Text>
-    </Surface>
-  );
-}
-
 function EmptyChart({ label, theme }: { label: string; theme: any }) {
   return (
     <View style={styles.emptyChart}>
-      <Icon source="chart-bar" size={32} color="#ccc" />
-      <Text style={{ color: '#999', marginTop: 8 }}>{label}</Text>
+      <Icon source="chart-bar" size={32} color={theme.border} />
+      <Text style={{ color: theme.textSecondary, marginTop: 8 }}>{label}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   scrollRoot: { flex: 1 },
-  container: { padding: 16, paddingBottom: 40 },
+  container: { padding: 20, paddingBottom: 40 },
   sectionLabel: { marginBottom: 10, marginTop: 16, fontSize: 11, letterSpacing: 1 },
-  tilesRow: { flexDirection: 'row', gap: 12 },
-  tile: { flex: 1, padding: 14, borderRadius: 12, borderWidth: 1, gap: 4 },
-  bigExpCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginTop: 12,
+  emptyDonut: {
+    width: 200, height: 200, borderRadius: 100,
+    borderWidth: 12, justifyContent: 'center', alignItems: 'center',
   },
-  bigExpText: { flex: 1 },
+  metricRow: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    marginBottom: 20, gap: 12,
+  },
+  metricDot: { width: 10, height: 10, borderRadius: 5, marginTop: 6 },
+  proCard: {
+    borderRadius: 16, borderWidth: 1,
+    padding: 20, marginVertical: 20,
+  },
+  proBtn: {
+    marginTop: 12, borderRadius: 24,
+  },
   chartCard: {
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
     overflow: 'hidden',
   },
-  pieRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  legend: { flex: 1, gap: 6 },
+  legend: { gap: 6 },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 10, height: 10, borderRadius: 5 },
   spenderRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },

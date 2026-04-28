@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { TextInput, Text, Chip, Divider, List, Icon, SegmentedButtons } from 'react-native-paper';
+import { useNavigation } from '@react-navigation/native';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
 import { formatAmount } from '../utils/currency';
@@ -16,6 +17,7 @@ const CATEGORIES = ['All', 'Food', 'Travel', 'Utilities', 'Rent', 'Entertainment
 
 export default function SearchScreen() {
   const { theme } = useAppTheme();
+  const navigation = useNavigation<any>();
   const expenses = useStore(state => state.expenses);
   const bills = useStore(state => state.bills);
   const currency = useStore(state => state.currency);
@@ -62,45 +64,59 @@ export default function SearchScreen() {
     });
   }, [query, expenses, bills, sortKey, filterCategory, minAmount, maxAmount]);
 
+  const handlePressExpense = (expense: Expense) => {
+    if (expense.groupId && expense.groupId !== 'direct') {
+      navigation.navigate('GroupsTab', { screen: 'GroupDetail', params: { groupId: expense.groupId, groupName: '' } });
+    }
+  };
+
+  const handlePressBill = (bill: Bill) => {
+    navigation.navigate('HomeTab', { screen: 'BillDetail', params: { billId: bill.id } });
+  };
+
   const renderItem = ({ item }: { item: ResultItem }) => {
     if (item.kind === 'expense') {
       const e = item.data;
       return (
-        <List.Item
-          title={e.notes || 'Expense'}
-          description={`${new Date(e.date).toLocaleDateString()} · ${e.splitMethod} split`}
-          left={props => <List.Icon {...props} icon="cash-multiple" color={theme.primary} />}
-          right={() => (
-            <View style={styles.rightCol}>
-              <Text variant="titleSmall" style={{ color: theme.text, fontWeight: '600' }}>
-                {formatAmount(e.amount, currency)}
-              </Text>
-              <Text variant="bodySmall" style={{ color: '#888' }}>expense</Text>
-            </View>
-          )}
-          titleStyle={{ color: theme.text }}
-          descriptionStyle={{ color: '#888' }}
-        />
+        <TouchableOpacity onPress={() => handlePressExpense(e)} activeOpacity={0.7}>
+          <List.Item
+            title={e.notes || 'Expense'}
+            description={`${new Date(e.date).toLocaleDateString()} · ${e.splitMethod} split`}
+            left={props => <List.Icon {...props} icon="cash-multiple" color={theme.primary} />}
+            right={() => (
+              <View style={styles.rightCol}>
+                <Text variant="titleSmall" style={{ color: theme.text, fontWeight: '600' }}>
+                  {formatAmount(e.amount, currency)}
+                </Text>
+                <Text variant="bodySmall" style={{ color: theme.textSecondary }}>expense</Text>
+              </View>
+            )}
+            titleStyle={{ color: theme.text }}
+            descriptionStyle={{ color: theme.textSecondary }}
+          />
+        </TouchableOpacity>
       );
     }
 
     const b = item.data;
     return (
-      <List.Item
-        title={b.title}
-        description={`Due ${new Date(b.dueDate).toLocaleDateString()} · ${b.category}`}
-        left={props => <List.Icon {...props} icon="receipt-text" color="#FFAA00" />}
-        right={() => (
-          <View style={styles.rightCol}>
-            <Text variant="titleSmall" style={{ color: theme.text, fontWeight: '600' }}>
-              {formatAmount(b.amount, currency)}
-            </Text>
-            <Text variant="bodySmall" style={{ color: '#888' }}>bill</Text>
-          </View>
-        )}
-        titleStyle={{ color: theme.text }}
-        descriptionStyle={{ color: '#888' }}
-      />
+      <TouchableOpacity onPress={() => handlePressBill(b)} activeOpacity={0.7}>
+        <List.Item
+          title={b.title}
+          description={`Due ${new Date(b.dueDate).toLocaleDateString()} · ${b.category}`}
+          left={props => <List.Icon {...props} icon="receipt-text" color="#FFAA00" />}
+          right={() => (
+            <View style={styles.rightCol}>
+              <Text variant="titleSmall" style={{ color: theme.text, fontWeight: '600' }}>
+                {formatAmount(b.amount, currency)}
+              </Text>
+              <Text variant="bodySmall" style={{ color: theme.textSecondary }}>bill</Text>
+            </View>
+          )}
+          titleStyle={{ color: theme.text }}
+          descriptionStyle={{ color: theme.textSecondary }}
+        />
+      </TouchableOpacity>
     );
   };
 
@@ -173,7 +189,7 @@ export default function SearchScreen() {
         style={styles.segmented}
       />
 
-      <Text variant="bodySmall" style={styles.resultCount}>
+      <Text variant="bodySmall" style={[styles.resultCount, { color: theme.textSecondary }]}>
         {results.length} result{results.length !== 1 ? 's' : ''}
       </Text>
 
@@ -185,8 +201,8 @@ export default function SearchScreen() {
         ItemSeparatorComponent={() => <Divider />}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Icon source="text-search" size={48} color="#ccc" />
-            <Text style={{ color: '#999', marginTop: 12 }}>
+            <Icon source="text-search" size={48} color={theme.border} />
+            <Text style={{ color: theme.textSecondary, marginTop: 12 }}>
               {query ? 'No matches found' : 'Type to search your expenses and bills'}
             </Text>
           </View>
@@ -206,7 +222,7 @@ const styles = StyleSheet.create({
   categoryRow: { paddingHorizontal: 12, paddingVertical: 8 },
   chip: { marginRight: 6 },
   segmented: { marginHorizontal: 12, marginBottom: 8 },
-  resultCount: { color: '#888', paddingHorizontal: 16, marginBottom: 4 },
+  resultCount: { paddingHorizontal: 16, marginBottom: 4 },
   rightCol: { alignItems: 'flex-end', justifyContent: 'center', marginRight: 4 },
   empty: { alignItems: 'center', padding: 48 },
 });

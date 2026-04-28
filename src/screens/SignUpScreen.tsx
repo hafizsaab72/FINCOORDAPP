@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { TextInput, Button, Text, HelperText, SegmentedButtons, Icon } from 'react-native-paper';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
@@ -32,23 +32,45 @@ export default function SignUpScreen({ navigation }: any) {
   const [otp, setOtp] = useState('');
   const [phoneStep, setPhoneStep] = useState<PhoneStep>('number');
   const confirmationRef = useRef<FirebaseAuthTypes.ConfirmationResult | null>(null);
+  const cooldownRef = useRef<NodeJS.Timeout | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [touched, setTouched] = useState(false);
 
+  useEffect(() => {
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
+  }, []);
+
   const fullPhone = country.dialCode + localNumber.replace(/\D/g, '');
 
   // Validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const nameError = touched && name.trim().length < 2;
-  const emailError = touched && !email.includes('@');
+  const emailError = touched && !emailRegex.test(email);
   const passwordError = touched && password.length < 6;
   const confirmError = touched && confirmPassword !== password;
+
+  const passwordStrength = (pwd: string) => {
+    if (pwd.length === 0) return 0;
+    let score = 0;
+    if (pwd.length >= 6) score++;
+    if (pwd.length >= 10) score++;
+    if (/[A-Z]/.test(pwd)) score++;
+    if (/[0-9]/.test(pwd)) score++;
+    if (/[^A-Za-z0-9]/.test(pwd)) score++;
+    return score;
+  };
+  const strength = passwordStrength(password);
+  const strengthLabel = ['', 'Weak', 'Fair', 'Good', 'Strong', 'Very Strong'][strength] || '';
+  const strengthColor = ['', '#FF3B30', '#FFAA00', '#0F7A5B', '#0F7A5B', '#19A874'][strength] || '#888';
 
   // ── Email sign-up ─────────────────────────────────────────────────────────
   const handleEmailSignUp = async () => {
     setTouched(true);
-    if (name.trim().length < 2 || !email.includes('@') || password.length < 6 || confirmPassword !== password) return;
+    if (name.trim().length < 2 || !emailRegex.test(email) || password.length < 6 || confirmPassword !== password) return;
     setLoading(true);
     setError('');
     try {
@@ -64,6 +86,8 @@ export default function SignUpScreen({ navigation }: any) {
   };
 
   // ── Phone: send OTP ───────────────────────────────────────────────────────
+  const [resendCooldown, setResendCooldown] = useState(0);
+
   const handleSendOtp = async () => {
     setTouched(true);
     if (name.trim().length < 2) { setError('Enter your name first'); return; }
@@ -75,6 +99,17 @@ export default function SignUpScreen({ navigation }: any) {
       const confirmation = await auth().signInWithPhoneNumber(fullPhone);
       confirmationRef.current = confirmation;
       setPhoneStep('otp');
+      setResendCooldown(30);
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+      cooldownRef.current = setInterval(() => {
+        setResendCooldown(prev => {
+          if (prev <= 1) {
+            if (cooldownRef.current) clearInterval(cooldownRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -188,6 +223,11 @@ export default function SignUpScreen({ navigation }: any) {
               error={passwordError}
               style={styles.input}
             />
+            {password.length > 0 && (
+              <HelperText type="info" visible style={{ color: strengthColor }}>
+                Strength: {strengthLabel}
+              </HelperText>
+            )}
             {passwordError && <HelperText type="error" visible>Password must be at least 6 characters.</HelperText>}
 
             <TextInput
@@ -269,7 +309,9 @@ export default function SignUpScreen({ navigation }: any) {
               onChangeText={t => { setOtp(t); setError(''); }}
               left={<TextInput.Icon icon="shield-key-outline" />}
               style={styles.input}
-              maxLength={8}
+              maxLength={6}
+              autoComplete="sms-otp"
+              textContentType="oneTimeCode"
             />
 
             {!!error && <HelperText type="error" visible style={styles.serverError}>{error}</HelperText>}
@@ -286,6 +328,14 @@ export default function SignUpScreen({ navigation }: any) {
               Verify & Create Account
             </Button>
 
+            <Button
+              mode="text"
+              onPress={handleSendOtp}
+              disabled={resendCooldown > 0 || loading}
+              style={{ marginTop: 4 }}
+            >
+              {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : 'Resend OTP'}
+            </Button>
             <Button mode="text" onPress={resetPhone} style={{ marginTop: 4 }}>
               Change number
             </Button>
@@ -293,7 +343,7 @@ export default function SignUpScreen({ navigation }: any) {
         )}
 
         <View style={styles.footer}>
-          <Text variant="bodyMedium" style={{ color: '#888' }}>
+          <Text variant="bodyMedium" style={{ color: theme.textSecondary }}>
             Already have an account?{'  '}
           </Text>
           <Button mode="text" compact textColor={theme.primary} onPress={() => navigation.navigate('SignIn')}>

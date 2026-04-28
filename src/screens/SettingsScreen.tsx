@@ -83,7 +83,7 @@ export default function SettingsScreen({ navigation }: any) {
       style={[styles.scrollRoot, { backgroundColor: theme.background }]}
       contentContainerStyle={styles.container}
     >
-      <Text variant="titleMedium" style={[styles.sectionLabel, { color: '#888' }]}>
+      <Text variant="titleMedium" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
         APPEARANCE
       </Text>
       <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -95,11 +95,11 @@ export default function SettingsScreen({ navigation }: any) {
           )}
           right={() => <Switch value={isDark} onValueChange={toggleTheme} color={theme.primary} />}
           titleStyle={{ color: theme.text }}
-          descriptionStyle={{ color: '#888' }}
+          descriptionStyle={{ color: theme.textSecondary }}
         />
       </View>
 
-      <Text variant="titleMedium" style={[styles.sectionLabel, { color: '#888' }]}>
+      <Text variant="titleMedium" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
         CURRENCY
       </Text>
       <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -110,11 +110,11 @@ export default function SettingsScreen({ navigation }: any) {
           right={props => <List.Icon {...props} icon="chevron-right" />}
           onPress={() => setCurrencyModalVisible(true)}
           titleStyle={{ color: theme.text }}
-          descriptionStyle={{ color: '#888' }}
+          descriptionStyle={{ color: theme.textSecondary }}
         />
       </View>
 
-      <Text variant="titleMedium" style={[styles.sectionLabel, { color: '#888' }]}>
+      <Text variant="titleMedium" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
         FINCOORD PRO
       </Text>
       <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -123,9 +123,19 @@ export default function SettingsScreen({ navigation }: any) {
           description={isPro ? 'All features unlocked' : 'Analytics, export, OCR & more'}
           left={props => <List.Icon {...props} icon="crown" color="#FFD700" />}
           right={props => !isPro && <List.Icon {...props} icon="chevron-right" />}
-          onPress={() => navigation.getParent()?.navigate('Upgrade')}
+          onPress={() => navigation.navigate('Upgrade')}
           titleStyle={{ color: theme.text, fontWeight: '600' }}
-          descriptionStyle={{ color: '#888' }}
+          descriptionStyle={{ color: theme.textSecondary }}
+        />
+        <Divider />
+        <List.Item
+          title="Analytics"
+          description="Spending charts and trends"
+          left={props => <List.Icon {...props} icon="chart-bar" color={theme.primary} />}
+          right={props => <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => navigation.navigate('Analytics')}
+          titleStyle={{ color: theme.text }}
+          descriptionStyle={{ color: theme.textSecondary }}
         />
         {isPro && (
           <>
@@ -136,13 +146,83 @@ export default function SettingsScreen({ navigation }: any) {
               left={props => <List.Icon {...props} icon="file-export-outline" color={theme.primary} />}
               onPress={() => exportDataToCSV(expenses, bills)}
               titleStyle={{ color: theme.text }}
-              descriptionStyle={{ color: '#888' }}
+              descriptionStyle={{ color: theme.textSecondary }}
             />
           </>
         )}
       </View>
 
-      <Text variant="titleMedium" style={[styles.sectionLabel, { color: '#888' }]}>
+      <Text variant="titleMedium" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+        BILLS & REMINDERS
+      </Text>
+      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <List.Item
+          title="Bills & Reminders"
+          description="View upcoming and overdue bills"
+          left={props => <List.Icon {...props} icon="receipt-text-outline" color={theme.primary} />}
+          right={props => <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => navigation.navigate('ActivityTab', { screen: 'Activity' })}
+          titleStyle={{ color: theme.text }}
+          descriptionStyle={{ color: theme.textSecondary }}
+        />
+        <Divider />
+        <List.Item
+          title="Add Bill"
+          description="Track a new bill or recurring payment"
+          left={props => <List.Icon {...props} icon="receipt-text-plus-outline" color={theme.primary} />}
+          right={props => <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => navigation.navigate('AddBillModal')}
+          titleStyle={{ color: theme.text }}
+          descriptionStyle={{ color: theme.textSecondary }}
+        />
+        <Divider />
+        <List.Item
+          title="Add Expense"
+          description="Log a new shared expense"
+          left={props => <List.Icon {...props} icon="cash-plus" color={theme.primary} />}
+          right={props => <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => navigation.navigate('AddExpenseModal')}
+          titleStyle={{ color: theme.text }}
+          descriptionStyle={{ color: theme.textSecondary }}
+        />
+        <Divider />
+        <List.Item
+          title="Search"
+          description="Search expenses, bills, and groups"
+          left={props => <List.Icon {...props} icon="magnify" color={theme.primary} />}
+          right={props => <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => navigation.navigate('Search')}
+          titleStyle={{ color: theme.text }}
+          descriptionStyle={{ color: theme.textSecondary }}
+        />
+      </View>
+
+      <Text variant="titleMedium" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+        FRIENDS
+      </Text>
+      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <List.Item
+          title="Friends"
+          description="View your friends, requests and contacts"
+          left={props => <List.Icon {...props} icon="account-multiple-outline" color={theme.primary} />}
+          right={props => <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => navigation.navigate('FriendsTab', { screen: 'Friends' })}
+          titleStyle={{ color: theme.text }}
+          descriptionStyle={{ color: theme.textSecondary }}
+        />
+        <Divider />
+        <List.Item
+          title="My QR Code"
+          description="Share your QR or friend code so others can add you"
+          left={props => <List.Icon {...props} icon="qrcode" color={theme.primary} />}
+          right={props => <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => navigation.navigate('MyQRCode')}
+          titleStyle={{ color: theme.text }}
+          descriptionStyle={{ color: theme.textSecondary }}
+        />
+      </View>
+
+      <Text variant="titleMedium" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
         NOTIFICATIONS
       </Text>
       <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -154,25 +234,25 @@ export default function SettingsScreen({ navigation }: any) {
             <Switch value={notifications} onValueChange={setNotifications} color={theme.primary} />
           )}
           titleStyle={{ color: theme.text }}
-          descriptionStyle={{ color: '#888' }}
+          descriptionStyle={{ color: theme.textSecondary }}
         />
       </View>
 
-      <Text variant="titleMedium" style={[styles.sectionLabel, { color: '#888' }]}>
+      <Text variant="titleMedium" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
         ACCOUNT
       </Text>
       <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         {currentUser ? (
           <>
             {/* Profile row — tappable, shows avatar */}
-            <TouchableRipple onPress={() => navigation.getParent()?.navigate('Profile')}>
+            <TouchableRipple onPress={() => navigation.navigate('Profile')}>
               <View style={styles.profileRow}>
                 {currentUser.profilePic ? (
                   <Image source={{ uri: currentUser.profilePic }} style={styles.miniAvatar} />
                 ) : (
                   <View style={[styles.miniAvatar, styles.miniAvatarFallback, { backgroundColor: theme.primary }]}>
                     <Text style={styles.miniAvatarText}>
-                      {currentUser.name[0].toUpperCase()}
+                      {(currentUser.name?.[0] ?? '?').toUpperCase()}
                     </Text>
                   </View>
                 )}
@@ -180,7 +260,7 @@ export default function SettingsScreen({ navigation }: any) {
                   <Text variant="bodyLarge" style={{ color: theme.text, fontWeight: '600' }}>
                     {currentUser.name}
                   </Text>
-                  <Text variant="bodySmall" style={{ color: '#888' }}>
+                  <Text variant="bodySmall" style={{ color: theme.textSecondary }}>
                     {currentUser.email}
                   </Text>
                 </View>
@@ -195,8 +275,8 @@ export default function SettingsScreen({ navigation }: any) {
               title={isGuest ? 'Guest Mode' : 'Not signed in'}
               description={isGuest ? 'Sign in to sync your data' : ''}
               left={props => <List.Icon {...props} icon="account-outline" color="#888" />}
-              titleStyle={{ color: '#888' }}
-              descriptionStyle={{ color: '#aaa' }}
+              titleStyle={{ color: theme.textSecondary }}
+              descriptionStyle={{ color: theme.textSecondary }}
             />
             <Divider />
           </>
@@ -208,7 +288,7 @@ export default function SettingsScreen({ navigation }: any) {
           left={props => <List.Icon {...props} icon="delete-outline" color="#FF3B30" />}
           onPress={handleClearData}
           titleStyle={{ color: '#FF3B30' }}
-          descriptionStyle={{ color: '#888' }}
+          descriptionStyle={{ color: theme.textSecondary }}
         />
         {currentUser && (
           <>
@@ -219,7 +299,7 @@ export default function SettingsScreen({ navigation }: any) {
               left={props => <List.Icon {...props} icon="account-remove-outline" color="#FF3B30" />}
               onPress={handleDeleteAccount}
               titleStyle={{ color: '#FF3B30' }}
-              descriptionStyle={{ color: '#888' }}
+              descriptionStyle={{ color: theme.textSecondary }}
             />
           </>
         )}
@@ -269,7 +349,7 @@ export default function SettingsScreen({ navigation }: any) {
                     <Text variant="bodyLarge" style={{ color: theme.text }}>
                       {item.symbol}{'  '}{item.code}
                     </Text>
-                    <Text variant="bodySmall" style={{ color: '#888' }}>{item.name}</Text>
+                    <Text variant="bodySmall" style={{ color: theme.textSecondary }}>{item.name}</Text>
                   </View>
                   {item.code === currency && (
                     <List.Icon icon="check-circle" color={theme.primary} />

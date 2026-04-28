@@ -57,7 +57,7 @@ export default function InviteScreen() {
             <Image source={{ uri: inviter.profilePic }} style={styles.avatar} />
           ) : (
             <View style={[styles.avatarPlaceholder, { backgroundColor: theme.primary }]}>
-              <Text style={styles.avatarInitial}>{inviter.name[0].toUpperCase()}</Text>
+              <Text style={styles.avatarInitial}>{(inviter.name?.[0] ?? '?').toUpperCase()}</Text>
             </View>
           )}
           <Text variant="headlineSmall" style={[styles.name, { color: theme.text }]}>

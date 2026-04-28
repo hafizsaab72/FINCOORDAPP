@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import { Text, Surface, Button, Chip, Divider, List } from 'react-native-paper';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
 import { formatAmount } from '../utils/currency';
+import { scheduleBillReminder } from '../utils/notifications';
 
 const STATUS_CONFIG = {
   pending: { color: '#FFAA00', icon: 'clock-outline' },
@@ -16,6 +17,7 @@ export default function BillDetailScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
   const bills = useStore(state => state.bills);
   const markBillHandled = useStore(state => state.markBillHandled);
+  const updateBill = useStore(state => state.updateBill);
   const currency = useStore(state => state.currency);
 
   const bill = bills.find(b => b.id === billId);
@@ -29,6 +31,14 @@ export default function BillDetailScreen({ route, navigation }: any) {
   }
 
   const config = STATUS_CONFIG[bill.status];
+
+  const handleSnooze = () => {
+    const snoozedDate = new Date();
+    snoozedDate.setDate(snoozedDate.getDate() + 1);
+    updateBill(bill.id, { dueDate: snoozedDate.toISOString() });
+    scheduleBillReminder(bill.id, bill.title, snoozedDate.toISOString());
+    Alert.alert('Snoozed', `Reminder moved to ${snoozedDate.toLocaleDateString()}`);
+  };
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
@@ -68,7 +78,7 @@ export default function BillDetailScreen({ route, navigation }: any) {
             day: 'numeric',
           })}
           left={props => <List.Icon {...props} icon="calendar" color={theme.primary} />}
-          titleStyle={{ color: '#888' }}
+          titleStyle={{ color: theme.textSecondary }}
           descriptionStyle={{ color: theme.text }}
         />
         <Divider />
@@ -82,7 +92,7 @@ export default function BillDetailScreen({ route, navigation }: any) {
               color={theme.primary}
             />
           )}
-          titleStyle={{ color: '#888' }}
+          titleStyle={{ color: theme.textSecondary }}
           descriptionStyle={{ color: theme.text }}
         />
         <Divider />
@@ -90,24 +100,35 @@ export default function BillDetailScreen({ route, navigation }: any) {
           title="Category"
           description={bill.category}
           left={props => <List.Icon {...props} icon="tag-outline" color={theme.primary} />}
-          titleStyle={{ color: '#888' }}
+          titleStyle={{ color: theme.textSecondary }}
           descriptionStyle={{ color: theme.text }}
         />
       </Surface>
 
       {bill.status !== 'handled' && (
-        <Button
-          mode="contained"
-          icon="check-circle-outline"
-          onPress={() => {
-            markBillHandled(bill.id);
-            navigation.goBack();
-          }}
-          style={styles.handleButton}
-          contentStyle={styles.handleButtonContent}
-        >
-          Mark as Handled
-        </Button>
+        <>
+          <Button
+            mode="contained"
+            icon="check-circle-outline"
+            onPress={() => {
+              markBillHandled(bill.id);
+              navigation.goBack();
+            }}
+            style={styles.handleButton}
+            contentStyle={styles.handleButtonContent}
+          >
+            Mark as Handled
+          </Button>
+          <Button
+            mode="outlined"
+            icon="snooze"
+            onPress={handleSnooze}
+            style={styles.handleButton}
+            textColor={theme.primary}
+          >
+            Snooze for 1 day
+          </Button>
+        </>
       )}
     </ScrollView>
   );
@@ -135,7 +156,7 @@ const styles = StyleSheet.create({
   },
   handleButton: {
     marginHorizontal: 16,
-    marginBottom: 32,
+    marginBottom: 12,
     borderRadius: 10,
   },
   handleButtonContent: { paddingVertical: 6 },
