@@ -10,6 +10,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@gorhom/bottom-sheet": "^5.2.10",
     "@notifee/react-native": "^9.1.8",
     "@react-native-async-storage/async-storage": "^3.0.1",
     "@react-native-firebase/app": "^23.8.8",
@@ -22,13 +23,21 @@
     "react": "19.2.3",
     "react-native": "0.84.1",
     "react-native-contacts": "^8.0.10",
+    "react-native-fs": "^2.20.0",
+    "react-native-gesture-handler": "^2.31.1",
     "react-native-gifted-charts": "^1.4.76",
     "react-native-image-picker": "^7.1.2",
     "react-native-linear-gradient": "^2.8.3",
     "react-native-paper": "^5.15.0",
+    "react-native-paper-dates": "^0.23.6",
+    "react-native-qrcode-svg": "^6.3.21",
+    "react-native-reanimated": "^4.3.0",
     "react-native-safe-area-context": "^5.7.0",
     "react-native-screens": "^4.24.0",
+    "react-native-svg": "^15.15.4",
     "react-native-vector-icons": "^10.3.0",
+    "react-native-vision-camera": "^4.7.3",
+    "react-native-worklets": "^0.8.1",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
