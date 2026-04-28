@@ -213,8 +213,9 @@ export default function HomeScreen({ navigation }: any) {
                 key={f}
                 selected={billFilter === f}
                 onPress={() => setBillFilter(f)}
-                style={[styles.chip, billFilter === f && { backgroundColor: theme.primary + '20' }]}
+                style={[styles.filterChip, billFilter === f && { backgroundColor: theme.primary + '20' }]}
                 selectedColor={theme.primary}
+                textStyle={{ fontSize: 13 }}
               >
                 {f.charAt(0).toUpperCase() + f.slice(1)}
               </Chip>
@@ -226,7 +227,7 @@ export default function HomeScreen({ navigation }: any) {
             ItemSeparatorComponent={() => <Divider />}
             ListEmptyComponent={
               <View style={styles.emptyCenter}>
-                <Icon source="receipt-text-outline" size={48} color={theme.border} />
+                <Icon source="receipt-outline" size={48} color={theme.border} />
                 <Text variant="bodyLarge" style={[styles.emptyText, { color: theme.textSecondary }]}>
                   {billFilter === 'all'
                     ? 'No bills yet.\nUse + to add your first bill.'
@@ -243,7 +244,7 @@ export default function HomeScreen({ navigation }: any) {
                 <List.Item
                   title={item.title}
                   description={`Due: ${new Date(item.dueDate).toLocaleDateString()} · ${item.category}${item.isRecurring ? ' · Recurring' : ''}`}
-                  left={props => <List.Icon {...props} icon="receipt-text-outline" color={theme.primary} />}
+                  left={props => <List.Icon {...props} icon="receipt-outline" color={theme.primary} />}
                   right={() => (
                     <View style={styles.billRight}>
                       <Text variant="titleSmall" style={{ color: theme.text, fontWeight: '600' }}>
@@ -415,7 +416,7 @@ const styles = StyleSheet.create({
   },
   activityText: { flex: 1 },
   chipRow: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
-  chip: { },
+  filterChip: { marginRight: 8, height: 36, justifyContent: 'center' },
   billRight: { justifyContent: 'center', alignItems: 'flex-end', gap: 4, marginRight: 4 },
   reminderRight: { justifyContent: 'center', alignItems: 'flex-end', gap: 4, marginRight: 4 },
   emptyCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 48, gap: 12 },
