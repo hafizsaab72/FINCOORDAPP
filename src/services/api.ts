@@ -1,7 +1,7 @@
 import { API_URL } from '../constants/config';
 import { useStore } from '../store/useStore';
 
-type Method = 'GET' | 'POST' | 'PUT' | 'DELETE';
+type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export async function apiFetch<T = any>(
   path: string,
@@ -18,6 +18,11 @@ export async function apiFetch<T = any>(
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+
+  const contentType = res.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    throw new Error(`Server error (${res.status})`);
+  }
 
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Request failed');

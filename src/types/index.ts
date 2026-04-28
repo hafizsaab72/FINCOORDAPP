@@ -6,11 +6,48 @@ export interface User {
   avatar?: string;
 }
 
+export interface GroupMember {
+  _id: string;
+  name: string;
+  email: string;
+  profilePic?: string;
+}
+
 export interface Group {
   id: string;
   name: string;
   members: string[];
+  createdBy?: string;
   createdAt: string;
+  type?: 'trip' | 'home' | 'couple' | 'other';
+  image?: string;
+  startDate?: string;
+  endDate?: string;
+  simplifyDebts?: boolean;
+}
+
+export interface MemberBalance {
+  memberId: string;
+  name: string;
+  email: string;
+  profilePic?: string;
+  isMe: boolean;
+  net: number;
+}
+
+export interface SimplifiedTransaction {
+  from: string;
+  fromName: string;
+  to: string;
+  toName: string;
+  amount: number;
+}
+
+export interface GroupBalancesData {
+  totalOwedToYou: number;
+  totalYouOwe: number;
+  memberBalances: MemberBalance[];
+  simplifiedTransactions?: SimplifiedTransaction[];
 }
 
 export interface Expense {
@@ -18,16 +55,19 @@ export interface Expense {
   groupId: string;
   payerId: string;
   amount: number;
+  currency: string;
   notes: string;
   date: string;
   splitMethod: SplitMethod;
   splitDetails: Record<string, number>;
+  participantNames?: Record<string, string>; // id → display name, for local direct expenses
 }
 
 export interface Bill {
   id: string;
   title: string;
   amount: number;
+  currency?: string;
   dueDate: string;
   isRecurring: boolean;
   status: 'pending' | 'handled' | 'overdue';

@@ -4,6 +4,7 @@ export const lightTheme = {
   surface: '#F5FBF8', // Cards and panels [cite: 33]
   text: '#1E1E1E', // Primary copy [cite: 33]
   border: '#C9E6D9', // Dividers and containers [cite: 33]
+  textSecondary: '#888888', // Captions, timestamps, secondary labels
 };
 
 export const darkTheme = {
@@ -12,4 +13,5 @@ export const darkTheme = {
   surface: '#1A1A1A', // [cite: 33]
   text: '#F5F5F5', // [cite: 33]
   border: '#2A2A2A', // [cite: 33]
+  textSecondary: '#AAAAAA', // Captions, timestamps, secondary labels
 };

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { lightTheme } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
 
 interface Props {
   selected: 'equal' | 'percentage' | 'custom';
@@ -8,6 +8,7 @@ interface Props {
 }
 
 export const SplitSelector = ({ selected, onSelect }: Props) => {
+  const { theme } = useAppTheme();
   const types: Array<'equal' | 'percentage' | 'custom'> = [
     'equal',
     'percentage',
@@ -19,10 +20,10 @@ export const SplitSelector = ({ selected, onSelect }: Props) => {
       {types.map(type => (
         <TouchableOpacity
           key={type}
-          style={[styles.btn, selected === type && styles.activeBtn]}
+          style={[styles.btn, { borderColor: theme.border }, selected === type && { backgroundColor: theme.primary, borderColor: theme.primary }]}
           onPress={() => onSelect(type)}
         >
-          <Text style={[styles.text, selected === type && styles.activeText]}>
+          <Text style={[styles.text, { color: selected === type ? '#FFF' : theme.textSecondary }]}>
             {type.toUpperCase()}
           </Text>
         </TouchableOpacity>
@@ -38,13 +39,7 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: lightTheme.border,
     alignItems: 'center',
   },
-  activeBtn: {
-    backgroundColor: lightTheme.primary,
-    borderColor: lightTheme.primary,
-  },
-  text: { fontSize: 10, fontWeight: 'bold', color: '#666' },
-  activeText: { color: '#FFF' },
+  text: { fontSize: 10, fontWeight: 'bold' },
 });

@@ -1,20 +1,28 @@
 import { useStore } from '../store/useStore';
+import { apiFetch } from './api';
 
 const RATES_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const API_URL = 'https://api.exchangerate-api.com/v4/latest/USD';
 
 export async function fetchExchangeRates(): Promise<void> {
   const { ratesLastFetched, setExchangeRates } = useStore.getState();
   if (Date.now() - ratesLastFetched < RATES_TTL_MS) return; // still fresh
 
   try {
-    const res = await fetch(API_URL);
-    const data = await res.json();
+    const data = await apiFetch<{ base: string; rates: Record<string, number> }>('/currency/rates');
     if (data?.rates) {
-      setExchangeRates(data.rates as Record<string, number>);
+      setExchangeRates(data.rates);
     }
   } catch {
-    // silently fail — app works without live rates
+    // Fallback to direct API if backend is unreachable
+    try {
+      const res = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+      const fallback = await res.json();
+      if (fallback?.rates) {
+        setExchangeRates(fallback.rates as Record<string, number>);
+      }
+    } catch {
+      // silently fail — app works without live rates
+    }
   }
 }
 

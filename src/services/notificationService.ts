@@ -1,8 +1,8 @@
 import messaging from '@react-native-firebase/messaging';
 import notifee, { AndroidImportance, AndroidVisibility, EventType } from '@notifee/react-native';
-import { Alert } from 'react-native';
+import { navigate } from '../navigation/navigationRef';
 
-const API_BASE = 'http://10.0.2.2:3000/api'; // Android emulator → localhost
+import { API_URL as API_BASE } from '../constants/config';
 
 // ─── Channel Setup ───────────────────────────────────────────────────────────
 
@@ -62,6 +62,7 @@ export function setupForegroundHandler(): () => void {
     await notifee.displayNotification({
       title,
       body: body ?? '',
+      data: remoteMessage.data,
       android: {
         channelId: 'fincoord-default',
         pressAction: { id: 'default' },
@@ -73,7 +74,9 @@ export function setupForegroundHandler(): () => void {
   // Notifee foreground events (user taps in-app notification)
   const unsubscribeNotifee = notifee.onForegroundEvent(({ type, detail }) => {
     if (type === EventType.PRESS) {
-      // TODO: navigate to relevant screen based on detail.notification?.data?.type
+      const data = detail.notification?.data;
+      if (!data) return;
+      handleNotificationTap(data);
     }
   });
 
@@ -95,6 +98,7 @@ export function setupBackgroundHandler(): void {
     await notifee.displayNotification({
       title,
       body: body ?? '',
+      data: remoteMessage.data,
       android: {
         channelId: 'fincoord-default',
         pressAction: { id: 'default' },
@@ -104,6 +108,33 @@ export function setupBackgroundHandler(): void {
 
   // Notifee background event handler
   notifee.onBackgroundEvent(async ({ type, detail }) => {
-    // Handle background notification press if needed
+    if (type === EventType.PRESS) {
+      const data = detail.notification?.data;
+      if (!data) return;
+      handleNotificationTap(data);
+    }
   });
+}
+
+// ─── Notification Tap Navigation ──────────────────────────────────────────────
+
+function handleNotificationTap(data: Record<string, any>) {
+  const notificationType = data?.type;
+  switch (notificationType) {
+    case 'bill_reminder':
+      if (data?.billId) {
+        navigate('BillDetail', { billId: data.billId });
+      }
+      break;
+    case 'friend_request':
+      navigate('Friends');
+      break;
+    case 'friend_request_accepted':
+      navigate('Friends');
+      break;
+    default:
+      // Fallback: navigate to home
+      navigate('MainTabs');
+      break;
+  }
 }
