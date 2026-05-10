@@ -1,20 +1,17 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView, Alert } from 'react-native';
-import { Text, Surface, Button, Chip, Divider, List } from 'react-native-paper';
+import { Text, Surface, Button, Divider, List, Card, useTheme } from 'react-native-paper';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
 import { formatAmount } from '../utils/currency';
 import { scheduleBillReminder } from '../utils/notifications';
-
-const STATUS_CONFIG = {
-  pending: { color: '#FFAA00', icon: 'clock-outline' },
-  overdue: { color: '#FF3B30', icon: 'alert-circle-outline' },
-  handled: { color: '#0F7A5B', icon: 'check-circle-outline' },
-};
+import { haptics } from '../utils/haptics';
+import StatusChip from '../components/StatusChip';
 
 export default function BillDetailScreen({ route, navigation }: any) {
   const { billId } = route.params;
   const { theme } = useAppTheme();
+  const paperTheme = useTheme();
   const bills = useStore(state => state.bills);
   const markBillHandled = useStore(state => state.markBillHandled);
   const updateBill = useStore(state => state.updateBill);
@@ -25,14 +22,13 @@ export default function BillDetailScreen({ route, navigation }: any) {
   if (!bill) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.background }]}>
-        <Text style={{ color: theme.text }}>Bill not found.</Text>
+        <Text variant="bodyLarge" style={{ color: theme.text }}>Bill not found.</Text>
       </View>
     );
   }
 
-  const config = STATUS_CONFIG[bill.status];
-
   const handleSnooze = () => {
+    haptics.light();
     const snoozedDate = new Date();
     snoozedDate.setDate(snoozedDate.getDate() + 1);
     updateBill(bill.id, { dueDate: snoozedDate.toISOString() });
@@ -40,30 +36,28 @@ export default function BillDetailScreen({ route, navigation }: any) {
     Alert.alert('Snoozed', `Reminder moved to ${snoozedDate.toLocaleDateString()}`);
   };
 
+  const handleMarkHandled = () => {
+    haptics.success();
+    markBillHandled(bill.id);
+    navigation.goBack();
+  };
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
-      <Surface
-        style={[styles.heroCard, { backgroundColor: theme.primary }]}
-        elevation={2}
-      >
-        <Text variant="labelLarge" style={styles.heroLabel}>
-          {bill.category}
-        </Text>
-        <Text variant="displaySmall" style={styles.heroAmount}>
-          {formatAmount(bill.amount, currency)}
-        </Text>
-        <Text variant="titleMedium" style={styles.heroTitle}>
-          {bill.title}
-        </Text>
-        <Chip
-          mode="flat"
-          icon={config.icon}
-          style={[styles.heroChip, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
-          textStyle={{ color: '#FFF' }}
-        >
-          {bill.status.toUpperCase()}
-        </Chip>
-      </Surface>
+      <Card style={[styles.heroCard, { backgroundColor: theme.primary }]}>
+        <Card.Content style={styles.heroCardContent}>
+          <Text variant="labelLarge" style={{ color: paperTheme.colors.onPrimary, opacity: 0.75 }}>
+            {bill.category}
+          </Text>
+          <Text variant="displaySmall" style={{ color: paperTheme.colors.onPrimary, fontWeight: '700' }}>
+            {formatAmount(bill.amount, currency)}
+          </Text>
+          <Text variant="titleMedium" style={{ color: paperTheme.colors.onPrimary }}>
+            {bill.title}
+          </Text>
+          <StatusChip type={bill.status} compact />
+        </Card.Content>
+      </Card>
 
       <Surface
         style={[styles.detailCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
@@ -110,10 +104,7 @@ export default function BillDetailScreen({ route, navigation }: any) {
           <Button
             mode="contained"
             icon="check-circle-outline"
-            onPress={() => {
-              markBillHandled(bill.id);
-              navigation.goBack();
-            }}
+            onPress={handleMarkHandled}
             style={styles.handleButton}
             contentStyle={styles.handleButtonContent}
           >
@@ -139,14 +130,11 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   heroCard: {
     margin: 16,
-    padding: 24,
     borderRadius: 16,
+  },
+  heroCardContent: {
     gap: 8,
   },
-  heroLabel: { color: 'rgba(255,255,255,0.75)' },
-  heroAmount: { color: '#FFF', fontWeight: 'bold' },
-  heroTitle: { color: '#FFF' },
-  heroChip: { alignSelf: 'flex-start', marginTop: 4 },
   detailCard: {
     marginHorizontal: 16,
     borderRadius: 12,

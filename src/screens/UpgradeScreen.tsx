@@ -1,8 +1,9 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, Button, List, Divider, Icon } from 'react-native-paper';
+import { Text, Button, List, Divider, Icon, Card } from 'react-native-paper';
 import { useAppTheme } from '../context/ThemeContext';
 import { useStore } from '../store/useStore';
+import { haptics } from '../utils/haptics';
 
 const PRO_FEATURES = [
   { icon: 'chart-bar', title: 'Spending Analytics', desc: 'Bar charts, pie charts, trends' },
@@ -19,6 +20,7 @@ export default function UpgradeScreen({ navigation }: any) {
   const setIsPro = useStore(state => state.setIsPro);
 
   const handleUpgrade = () => {
+    haptics.success();
     // TODO: wire RevenueCat purchase flow here
     setIsPro(true);
     navigation.goBack();
@@ -48,11 +50,11 @@ export default function UpgradeScreen({ navigation }: any) {
         </View>
       ) : null}
 
-      <Text variant="titleSmall" style={[styles.sectionLabel, { color: '#888' }]}>
+      <Text variant="labelSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
         WHAT'S INCLUDED
       </Text>
 
-      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <Card mode="outlined" style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         {PRO_FEATURES.map((feature, idx) => (
           <React.Fragment key={feature.title}>
             <List.Item
@@ -61,12 +63,12 @@ export default function UpgradeScreen({ navigation }: any) {
               left={props => <List.Icon {...props} icon={feature.icon} color={theme.primary} />}
               right={() => <Icon source="check" size={20} color={theme.primary} />}
               titleStyle={{ color: theme.text, fontWeight: '600' }}
-              descriptionStyle={{ color: '#888' }}
+              descriptionStyle={{ color: theme.textSecondary }}
             />
             {idx < PRO_FEATURES.length - 1 && <Divider />}
           </React.Fragment>
         ))}
-      </View>
+      </Card>
 
       {!isPro && (
         <>
@@ -74,7 +76,7 @@ export default function UpgradeScreen({ navigation }: any) {
             <Text variant="displaySmall" style={[styles.price, { color: theme.primary }]}>
               $4.99
             </Text>
-            <Text variant="bodyMedium" style={{ color: '#888' }}>
+            <Text variant="bodyMedium" style={{ color: theme.textSecondary }}>
               per month · cancel anytime
             </Text>
           </View>
@@ -90,7 +92,7 @@ export default function UpgradeScreen({ navigation }: any) {
             Upgrade to Pro
           </Button>
 
-          <Text style={styles.disclaimer}>
+          <Text variant="bodySmall" style={[styles.disclaimer, { color: theme.textSecondary }]}>
             Payment will be handled through the App Store / Google Play.
             {'\n'}Development mode: tap above to activate Pro immediately.
           </Text>
@@ -108,12 +110,12 @@ const styles = StyleSheet.create({
     padding: 40,
     gap: 12,
   },
-  heroTitle: { color: '#FFF', fontWeight: 'bold' },
+  heroTitle: { color: '#FFF', fontWeight: '700' },
   heroSub: { color: 'rgba(255,255,255,0.85)', textAlign: 'center' },
   activeContainer: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 20 },
   activeText: { fontWeight: '600' },
-  sectionLabel: { marginHorizontal: 16, marginTop: 24, marginBottom: 8, fontSize: 11, letterSpacing: 1 },
-  card: { marginHorizontal: 16, borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
+  sectionLabel: { marginHorizontal: 16, marginTop: 24, marginBottom: 8, letterSpacing: 1 },
+  card: { marginHorizontal: 16, borderRadius: 12, overflow: 'hidden' },
   pricingCard: {
     marginHorizontal: 16,
     marginTop: 24,
@@ -123,8 +125,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  price: { fontWeight: 'bold' },
+  price: { fontWeight: '700' },
   upgradeBtn: { margin: 16, borderRadius: 12 },
   upgradeBtnContent: { paddingVertical: 8 },
-  disclaimer: { textAlign: 'center', color: '#999', fontSize: 12, paddingHorizontal: 24, paddingBottom: 32 },
+  disclaimer: { textAlign: 'center', fontSize: 12, paddingHorizontal: 24, paddingBottom: 32 },
 });

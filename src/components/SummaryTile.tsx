@@ -1,44 +1,45 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { lightTheme } from '../constants/theme';
+import { StyleSheet } from 'react-native';
+import { Surface, Text, Icon, useTheme } from 'react-native-paper';
 
-interface SummaryProps {
+interface SummaryTileProps {
   label: string;
   value: string;
   type: 'positive' | 'negative' | 'neutral';
+  icon?: string;
 }
 
-export const SummaryTile = ({ label, value, type }: SummaryProps) => {
+export default function SummaryTile({ label, value, type, icon }: SummaryTileProps) {
+  const theme = useTheme();
+
   const valueColor =
     type === 'positive'
-      ? '#0F7A5B'
+      ? theme.colors.primary
       : type === 'negative'
-      ? '#FF3B30'
-      : '#1E1E1E';
+      ? theme.colors.error
+      : theme.colors.onSurface;
 
   return (
-    <View style={styles.tile}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={[styles.value, { color: valueColor }]}>{value}</Text>
-    </View>
+    <Surface style={styles.tile} elevation={1}>
+      {icon && <Icon source={icon} size={24} color={valueColor} />}
+      <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+        {label}
+      </Text>
+      <Text variant="titleLarge" style={[styles.value, { color: valueColor }]}>
+        {value}
+      </Text>
+    </Surface>
   );
-};
+}
 
 const styles = StyleSheet.create({
   tile: {
     flex: 1,
     padding: 16,
-    backgroundColor: lightTheme.surface,
     borderRadius: 12,
     marginHorizontal: 4,
-    borderWidth: 1,
-    borderColor: lightTheme.border,
+    gap: 6,
+    alignItems: 'flex-start',
   },
-  label: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-  },
-  value: { fontSize: 20, fontWeight: 'bold' },
+  value: { fontWeight: '700' },
 });

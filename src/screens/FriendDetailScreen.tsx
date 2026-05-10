@@ -1,27 +1,19 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import {
-  View, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Alert, Image, RefreshControl,
+  View, StyleSheet, ScrollView, StatusBar, Alert, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text, Icon, FAB, Divider, Snackbar } from 'react-native-paper';
+import { Text, Icon, FAB, Divider, Snackbar, TouchableRipple, Surface } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
 import { BalanceBreakdown, friendsService } from '../services/friendsService';
 import { groupColor, getGroupTypeConfig } from '../constants/groupTypes';
 import { MemberBalance } from '../types';
-
-// ─── helpers ────────────────────────────────────────────────────────────────
-
-const AVATAR_COLORS = [
-  '#E57373', '#F06292', '#BA68C8', '#9575CD', '#7986CB',
-  '#4FC3F7', '#4DB6AC', '#81C784', '#FFB74D', '#FF8A65',
-];
-function avatarColor(id: string): string {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = id.charCodeAt(i) + ((h << 5) - h);
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
-}
+import ActionBar from '../components/ActionBar';
+import AppAvatar from '../components/AppAvatar';
+import EmptyState from '../components/EmptyState';
+import { haptics } from '../utils/haptics';
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
   USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥',
@@ -33,7 +25,7 @@ function currencySymbol(code?: string): string {
 
 // ─── Geometric banner ────────────────────────────────────────────────────────
 
-const BANNER_H = 178;
+const BANNER_H = 150;
 
 function GeometricBanner() {
   return (
@@ -137,6 +129,7 @@ export default function FriendDetailScreen({ route, navigation }: any) {
   );
 
   const handleGearPress = () => {
+    haptics.light();
     Alert.alert(
       friendName,
       'Manage this friend',
@@ -156,6 +149,7 @@ export default function FriendDetailScreen({ route, navigation }: any) {
                   onPress: async () => {
                     try {
                       await friendsService.remove(friendId);
+                      haptics.success();
                     } catch {
                       // Silent fail — navigate back regardless
                     }
@@ -172,91 +166,105 @@ export default function FriendDetailScreen({ route, navigation }: any) {
   };
 
   const handleRemind = () => {
-    Alert.alert(
-      'Send Reminder',
-      `Send a payment reminder to ${friendName}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Send',
-          onPress: async () => {
-            try {
-              await friendsService.remind(friendId);
-              setRemindSnackMsg(`Reminder sent to ${friendName}`);
-            } catch {
-              setRemindSnackMsg('Could not send reminder. Try again.');
-            }
-            setRemindSnack(true);
-          },
-        },
-      ],
-    );
+    haptics.light();
+    (async () => {
+      try {
+        await friendsService.remind(friendId);
+        haptics.success();
+        setRemindSnackMsg(`Reminder sent to ${friendName}`);
+      } catch {
+        setRemindSnackMsg('Could not send reminder. Try again.');
+      }
+      setRemindSnack(true);
+    })();
   };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle="light-content" />
 
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
-      >
-
-        {/* ── Dark geometric banner ── */}
-        <View>
+      {/* ═══════════════════════════════════════════════════════════════
+          FIXED HEADER — banner, avatar, name, balance, actions
+          (does NOT scroll)
+         ═══════════════════════════════════════════════════════════════ */}
+      <View>
+        {/* Banner with safe-area padding */}
+        <View style={{ paddingTop: insets.top }}>
           <GeometricBanner />
+        </View>
 
-          {/* Back + gear over banner */}
-          <View style={[styles.bannerBtns, { top: insets.top + 8 }]}>
-            <TouchableOpacity style={styles.circleBtn} onPress={() => navigation.goBack()}>
-              <Icon source="arrow-left" size={22} color="#FFF" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.circleBtn} onPress={handleGearPress}>
+        {/* Buttons overlaid on banner */}
+        <View style={[styles.bannerBtns, { top: insets.top + 8 }]}>
+          <TouchableRipple
+            style={styles.circleBtn}
+            onPress={() => {
+              // @ts-ignore popTo available in native-stack v6.7+/v7
+              if (navigation.popTo) {
+                navigation.popTo('Friends');
+              } else {
+                navigation.goBack();
+              }
+            }}
+            borderless
+          >
+            <Icon source="arrow-left" size={22} color="#FFF" />
+          </TouchableRipple>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableRipple
+              style={styles.circleBtn}
+              onPress={() => {
+                haptics.light();
+                navigation.navigate('Search');
+              }}
+              borderless
+            >
+              <Icon source="magnify" size={22} color="#FFF" />
+            </TouchableRipple>
+            <TouchableRipple
+              style={styles.circleBtn}
+              onPress={handleGearPress}
+              borderless
+            >
               <Icon source="cog-outline" size={22} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Avatar overlapping banner bottom edge */}
-          <View style={styles.avatarWrap}>
-            <View style={[styles.avatarRing, { borderColor: theme.background }]}>
-              {friendProfilePic ? (
-                <Image source={{ uri: friendProfilePic }} style={styles.avatarImg} />
-              ) : (
-                <View style={[styles.avatarPlaceholder, { backgroundColor: avatarColor(friendId || friendName) }]}>
-                  <Text style={styles.avatarLetter}>
-                    {(friendName?.[0] ?? '?').toUpperCase()}
-                  </Text>
-                </View>
-              )}
-            </View>
+            </TouchableRipple>
           </View>
         </View>
 
-        {/* ── Name + balance ── */}
+        {/* Avatar overlapping banner bottom */}
+        <View style={styles.avatarWrap}>
+          <View style={[styles.avatarRing, { borderColor: theme.background }]}>
+            <AppAvatar
+              user={{ _id: friendId, name: friendName, profilePic: friendProfilePic }}
+              size={90}
+            />
+          </View>
+        </View>
+
+        {/* Name + balance */}
         <View style={styles.infoSection}>
-          <Text style={[styles.friendName, { color: theme.text }]}>{friendName}</Text>
+          <Text variant="headlineSmall" style={{ color: theme.text }}>{friendName}</Text>
 
           {isOwed && (
-            <Text style={[styles.balanceLine, { color: '#0F7A5B' }]}>
+            <Text variant="titleMedium" style={{ color: theme.success }}>
               You are owed {symbol}{absNet.toFixed(2)} overall
             </Text>
           )}
           {isOwe && (
-            <Text style={[styles.balanceLine, { color: '#E8673A' }]}>
+            <Text variant="titleMedium" style={{ color: theme.warning }}>
               You owe {symbol}{absNet.toFixed(2)} overall
             </Text>
           )}
           {!isOwed && !isOwe && (
-            <Text style={[styles.balanceLine, { color: theme.textSecondary }]}>All settled up</Text>
+            <Text variant="titleMedium" style={{ color: theme.textSecondary }}>All settled up</Text>
           )}
 
           {/* Breakdown sub-lines */}
           {shownBreakdown.map((b, i) => {
             const owed = b.direction === 'owes_you';
             return (
-              <Text key={i} style={[styles.breakdownLine, { color: '#888' }]} numberOfLines={1}>
+              <Text key={i} variant="bodySmall" style={{ color: theme.textSecondary, marginTop: 3, lineHeight: 18 }} numberOfLines={1}>
                 {owed ? 'Owes you ' : 'You owe '}
-                <Text style={{ color: owed ? '#0F7A5B' : '#E8673A', fontWeight: '600' }}>
+                <Text style={{ color: owed ? theme.success : theme.warning, fontWeight: '600' }}>
                   {symbol}{b.amount.toFixed(2)}
                 </Text>
                 {` in "${b.groupName}"`}
@@ -264,154 +272,168 @@ export default function FriendDetailScreen({ route, navigation }: any) {
             );
           })}
           {extraCount > 0 && (
-            <Text style={[styles.breakdownLine, { color: theme.textSecondary }]}>
+            <Text variant="bodySmall" style={{ color: theme.textSecondary, marginTop: 3, lineHeight: 18 }}>
               Plus {extraCount} more balance{extraCount > 1 ? 's' : ''}
             </Text>
           )}
         </View>
 
-        {/* ── Action row ── */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#E8673A' }]}
-            onPress={() => {
-              const settleMembers: MemberBalance[] = [
-                { memberId: myId, name: myName, email: currentUser?.email ?? '', isMe: true, net: -effectiveNetBalance },
-                { memberId: friendId, name: friendName, email: '', isMe: false, net: effectiveNetBalance },
-              ];
-              navigation.navigate('SettleUpModal', {
-                groupId: 'direct',
-                groupName: `Settlement with ${friendName}`,
-                members: settleMembers,
-                preselectedMemberId: effectiveNetBalance > 0 ? friendId : myId,
-              });
-            }}
-          >
-            <Icon source="handshake-outline" size={20} color="#FFF" />
-            <Text style={styles.actionLabel}>Settle up</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#242430' }]}
-            onPress={handleRemind}
-          >
-            <Icon source="bell-outline" size={20} color="#FFF" />
-            <Text style={styles.actionLabel}>Remind...</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#242430' }]}
-            onPress={() => navigation.navigate('Analytics', { friendId, friendName })}
-          >
-            <Icon source="chart-bar" size={20} color="#9B59B6" />
-            <Text style={styles.actionLabel}>Charts</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#242430' }]}
-            onPress={() => Alert.alert('Convert to IOU', 'Available with FinCoord Pro!')}
-          >
-            <Icon source="file-document-outline" size={20} color="#FFF" />
-            <Text style={styles.actionLabel}>{'Convert\nto IOU'}</Text>
-          </TouchableOpacity>
+        {/* Horizontal scrollable action bar */}
+        <View style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }}>
+          <ActionBar
+            actions={[
+              {
+                icon: 'handshake-outline',
+                label: 'Settle up',
+                onPress: () => {
+                  haptics.light();
+                  const settleMembers: MemberBalance[] = [
+                    { memberId: myId, name: myName, email: currentUser?.email ?? '', isMe: true, net: -effectiveNetBalance },
+                    { memberId: friendId, name: friendName, email: '', isMe: false, net: effectiveNetBalance },
+                  ];
+                  navigation.navigate('SettleUpModal', {
+                    groupId: 'direct',
+                    groupName: `Settlement with ${friendName}`,
+                    members: settleMembers,
+                    preselectedMemberId: effectiveNetBalance > 0 ? friendId : myId,
+                  });
+                },
+                variant: 'contained',
+              },
+              {
+                icon: 'bell-outline',
+                label: 'Remind',
+                onPress: handleRemind,
+              },
+              {
+                icon: 'chart-bar',
+                label: 'Charts',
+                onPress: () => {
+                  haptics.light();
+                  navigation.navigate('Analytics', { friendId, friendName });
+                },
+              },
+              {
+                icon: 'file-document-outline',
+                label: 'To IOU',
+                onPress: () => {
+                  haptics.light();
+                  setRemindSnackMsg('Available with FinCoord Pro!');
+                  setRemindSnack(true);
+                },
+              },
+            ]}
+          />
         </View>
+      </View>
 
-        {/* ── Shared groups / activity ── */}
+      {/* ═══════════════════════════════════════════════════════════════
+          SCROLLABLE CONTENT — shared groups + direct transactions
+         ═══════════════════════════════════════════════════════════════ */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+      >
+        {/* Shared groups */}
         {freshBreakdown.length > 0 ? (
           <>
             <View style={[styles.sectionBar, { borderBottomColor: theme.border }]}>
-              <Text style={styles.sectionBarText}>SHARED GROUPS</Text>
+              <Text variant="titleMedium" style={{ textTransform: 'uppercase', letterSpacing: 0.8 }}>Shared groups</Text>
             </View>
 
             {freshBreakdown.map((b, i) => {
               const color = groupColor(b.groupId);
-              const typeConfig = getGroupTypeConfig(); // default icon
+              const typeConfig = getGroupTypeConfig();
               const owed = b.direction === 'owes_you';
 
               return (
-                <TouchableOpacity
+                <TouchableRipple
                   key={i}
-                  style={[styles.groupRow, { borderBottomColor: theme.border, backgroundColor: theme.surface }]}
-                  onPress={() => navigation.navigate('GroupsTab', { screen: 'GroupDetail', params: { groupId: b.groupId, groupName: b.groupName } })}
-                  activeOpacity={0.7}
+                  onPress={() => {
+                    haptics.light();
+                    navigation.navigate('GroupsTab', { screen: 'GroupDetail', params: { groupId: b.groupId, groupName: b.groupName } });
+                  }}
                 >
-                  <View style={[styles.groupIconBox, { backgroundColor: color }]}>
-                    <Icon source={typeConfig.icon} size={20} color="#FFF" />
-                  </View>
-                  <View style={styles.groupRowInfo}>
-                    <Text style={[styles.groupRowName, { color: theme.text }]} numberOfLines={1}>
-                      {b.groupName}
-                    </Text>
-                    <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Shared group</Text>
-                  </View>
-                  <View style={styles.groupRowRight}>
-                    {b.amount > 0.005 ? (
-                      <>
-                        <Text style={{ fontSize: 11, color: owed ? '#0F7A5B' : '#E8673A' }}>
-                          {owed ? 'owes you' : 'you owe'}
-                        </Text>
-                        <Text style={{ fontSize: 14, fontWeight: '700', color: owed ? '#0F7A5B' : '#E8673A' }}>
-                          {symbol}{b.amount.toFixed(2)}
-                        </Text>
-                      </>
-                    ) : (
-                      <Text style={{ fontSize: 12, color: '#888' }}>settled</Text>
-                    )}
-                  </View>
-                  <Icon source="chevron-right" size={18} color="#CCC" />
-                </TouchableOpacity>
+                  <Surface style={[styles.groupRow, { borderBottomColor: theme.border }]} elevation={1}>
+                    <View style={[styles.groupIconBox, { backgroundColor: color }]}>
+                      <Icon source={typeConfig.icon} size={20} color="#FFF" />
+                    </View>
+                    <View style={styles.groupRowInfo}>
+                      <Text variant="titleSmall" style={{ color: theme.text }} numberOfLines={1}>
+                        {b.groupName}
+                      </Text>
+                      <Text variant="bodySmall" style={{ color: theme.textSecondary }}>Shared group</Text>
+                    </View>
+                    <View style={styles.groupRowRight}>
+                      {b.amount > 0.005 ? (
+                        <>
+                          <Text variant="bodySmall" style={{ color: owed ? theme.success : theme.warning }}>
+                            {owed ? 'owes you' : 'you owe'}
+                          </Text>
+                          <Text variant="titleSmall" style={{ color: owed ? theme.success : theme.warning }}>
+                            {symbol}{b.amount.toFixed(2)}
+                          </Text>
+                        </>
+                      ) : (
+                        <Text variant="bodySmall" style={{ color: theme.textSecondary }}>settled</Text>
+                      )}
+                    </View>
+                    <Icon source="chevron-right" size={18} color={theme.outline} />
+                  </Surface>
+                </TouchableRipple>
               );
             })}
           </>
         ) : (
-          <View style={styles.emptySection}>
-            <Icon source="handshake-outline" size={52} color="#CCC" />
-            <Text style={{ color: '#999', textAlign: 'center', marginTop: 12, lineHeight: 20 }}>
-              No shared groups with {friendName} yet.
-            </Text>
-          </View>
+          <EmptyState
+            icon="handshake-outline"
+            title="No shared groups"
+            subtitle={`No shared groups with ${friendName} yet.`}
+          />
         )}
 
-        {/* ── Direct / non-group transactions ── */}
+        {/* Direct transactions */}
         {directExpenses.length > 0 && (
           <>
             <Divider style={{ marginTop: 8 }} />
             <View style={[styles.sectionBar, { borderBottomColor: theme.border }]}>
-              <Text style={styles.sectionBarText}>DIRECT TRANSACTIONS</Text>
+              <Text variant="titleMedium" style={{ textTransform: 'uppercase', letterSpacing: 0.8 }}>Direct transactions</Text>
             </View>
             {directExpenses.map(e => {
               const iPaid = e.payerId === myId;
               const myNet = iPaid
-                ? (e.splitDetails[friendId] ?? 0)   // friend owes me this
-                : -(e.splitDetails[myId] ?? 0);      // I owe friend this
-              const txColor = myNet > 0 ? '#0F7A5B' : '#E8673A';
+                ? (e.splitDetails[friendId] ?? 0)
+                : -(e.splitDetails[myId] ?? 0);
+              const txColor = myNet > 0 ? theme.success : theme.warning;
               const d = new Date(e.date);
               const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
               return (
-                <View
+                <Surface
                   key={e.id}
-                  style={[styles.txRow, { borderBottomColor: theme.border, backgroundColor: theme.surface }]}
+                  style={[styles.txRow, { borderBottomColor: theme.border }]}
+                  elevation={1}
                 >
                   <View style={[styles.txIconBox, { backgroundColor: theme.border }]}>
                     <Icon source="swap-horizontal" size={18} color={theme.text} />
                   </View>
                   <View style={styles.txInfo}>
-                    <Text style={[styles.txTitle, { color: theme.text }]} numberOfLines={1}>
+                    <Text variant="titleSmall" style={{ color: theme.text }} numberOfLines={1}>
                       {e.notes || 'Expense'}
                     </Text>
-                    <Text style={{ color: '#888', fontSize: 12 }}>
+                    <Text variant="bodySmall" style={{ color: theme.textSecondary }}>
                       {iPaid ? 'You paid' : `${friendName} paid`} · {dateStr}
                     </Text>
                   </View>
                   <View style={styles.txRight}>
-                    <Text style={{ fontSize: 11, color: txColor }}>
+                    <Text variant="bodySmall" style={{ color: txColor }}>
                       {myNet > 0 ? 'owes you' : 'you owe'}
                     </Text>
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: txColor }}>
+                    <Text variant="titleSmall" style={{ color: txColor }}>
                       {symbol}{Math.abs(myNet).toFixed(2)}
                     </Text>
                   </View>
-                </View>
+                </Surface>
               );
             })}
           </>
@@ -425,14 +447,20 @@ export default function FriendDetailScreen({ route, navigation }: any) {
           size="small"
           style={[styles.fabScan, { backgroundColor: theme.surface }]}
           color={theme.primary}
-          onPress={() => navigation.navigate('QRScanner')}
+          onPress={() => {
+            haptics.light();
+            navigation.navigate('QRScanner');
+          }}
         />
         <FAB
           icon="plus"
           label="Add expense"
           style={[styles.fabAdd, { backgroundColor: theme.primary }]}
           color="#FFF"
-          onPress={() => navigation.navigate('AddExpenseModal', { friendId, friendName })}
+          onPress={() => {
+            haptics.light();
+            navigation.navigate('AddExpenseModal', { friendId, friendName });
+          }}
         />
       </View>
 
@@ -464,36 +492,15 @@ const styles = StyleSheet.create({
   // Avatar
   avatarWrap: { alignItems: 'center', marginTop: -47 },
   avatarRing: { borderWidth: 4, borderRadius: 50, overflow: 'hidden' },
-  avatarImg: { width: 90, height: 90, borderRadius: 45 },
-  avatarPlaceholder: {
-    width: 90, height: 90, borderRadius: 45,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  avatarLetter: { color: '#FFF', fontWeight: 'bold', fontSize: 36 },
 
   // Info
-  infoSection: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 14, paddingBottom: 20 },
-  friendName: { fontSize: 24, fontWeight: '700', marginBottom: 8 },
-  balanceLine: { fontSize: 17, fontWeight: '700', marginBottom: 8 },
-  breakdownLine: { fontSize: 13, marginTop: 3, lineHeight: 18 },
-
-  // Action row
-  actionRow: {
-    flexDirection: 'row', gap: 8,
-    paddingHorizontal: 16, paddingBottom: 24,
-  },
-  actionBtn: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 13, borderRadius: 14, gap: 5,
-  },
-  actionLabel: { color: '#FFF', fontSize: 11, fontWeight: '600', textAlign: 'center', lineHeight: 15 },
+  infoSection: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 14, paddingBottom: 16 },
 
   // Section
   sectionBar: {
     paddingHorizontal: 16, paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  sectionBarText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: '#888' },
 
   // Group rows
   groupRow: {
@@ -503,10 +510,7 @@ const styles = StyleSheet.create({
   },
   groupIconBox: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   groupRowInfo: { flex: 1 },
-  groupRowName: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
   groupRowRight: { alignItems: 'flex-end' },
-
-  emptySection: { alignItems: 'center', paddingTop: 48, paddingBottom: 24 },
 
   // Direct transaction rows
   txRow: {
@@ -516,7 +520,6 @@ const styles = StyleSheet.create({
   },
   txIconBox: { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   txInfo: { flex: 1 },
-  txTitle: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
   txRight: { alignItems: 'flex-end' },
 
   // FABs

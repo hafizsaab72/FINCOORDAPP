@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Image } from 'react-native';
-import { Text, Button, ActivityIndicator } from 'react-native-paper';
+import { Text, Button, ActivityIndicator, Card } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAppTheme } from '../context/ThemeContext';
 import { useStore } from '../store/useStore';
 import { friendsService, FriendUser } from '../services/friendsService';
+import { haptics } from '../utils/haptics';
 
 export default function InviteScreen() {
   const { theme } = useAppTheme();
@@ -34,11 +35,14 @@ export default function InviteScreen() {
       return;
     }
     if (!refUserId) return;
+    haptics.medium();
     setSending(true);
     try {
       await friendsService.sendRequest(refUserId);
+      haptics.success();
       setDone(true);
     } catch (e: any) {
+      haptics.error();
       setError(e.message || 'Failed to send request.');
     } finally {
       setSending(false);
@@ -50,46 +54,50 @@ export default function InviteScreen() {
       {loading ? (
         <ActivityIndicator color={theme.primary} size="large" />
       ) : error ? (
-        <Text style={styles.errorText}>{error}</Text>
+        <Text style={[styles.errorText, { color: theme.textSecondary }]}>{error}</Text>
       ) : inviter ? (
-        <>
-          {inviter.profilePic ? (
-            <Image source={{ uri: inviter.profilePic }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatarPlaceholder, { backgroundColor: theme.primary }]}>
-              <Text style={styles.avatarInitial}>{(inviter.name?.[0] ?? '?').toUpperCase()}</Text>
-            </View>
-          )}
-          <Text variant="headlineSmall" style={[styles.name, { color: theme.text }]}>
-            {inviter.name}
-          </Text>
-          <Text variant="bodyMedium" style={styles.subtitle}>
-            invited you to connect on FinCoord
-          </Text>
-
-          {done ? (
-            <Text style={[styles.successText, { color: theme.primary }]}>
-              Friend request sent!
+        <Card style={[styles.card, { backgroundColor: theme.surface }]}>
+          <Card.Content style={styles.cardContent}>
+            {inviter.profilePic ? (
+              <Image source={{ uri: inviter.profilePic }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatarPlaceholder, { backgroundColor: theme.primary }]}>
+                <Text style={[styles.avatarInitial, { color: theme.surface }]}>
+                  {(inviter.name?.[0] ?? '?').toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <Text variant="headlineSmall" style={[styles.name, { color: theme.text }]}>
+              {inviter.name}
             </Text>
-          ) : (
-            <Button
-              mode="contained"
-              loading={sending}
-              disabled={sending}
-              onPress={handleAddFriend}
-              style={[styles.btn, { backgroundColor: theme.primary }]}
-              contentStyle={styles.btnContent}
-            >
-              {currentUser ? 'Add Friend' : 'Sign in to Add Friend'}
-            </Button>
-          )}
+            <Text variant="bodyMedium" style={[styles.subtitle, { color: theme.textSecondary }]}>
+              invited you to connect on FinCoord
+            </Text>
 
-          <Button mode="text" onPress={() => navigation.navigate('MainTabs')} style={{ marginTop: 8 }}>
-            Go to App
-          </Button>
-        </>
+            {done ? (
+              <Text style={[styles.successText, { color: theme.primary }]}>
+                Friend request sent!
+              </Text>
+            ) : (
+              <Button
+                mode="contained"
+                loading={sending}
+                disabled={sending}
+                onPress={handleAddFriend}
+                style={[styles.btn, { backgroundColor: theme.primary }]}
+                contentStyle={styles.btnContent}
+              >
+                {currentUser ? 'Add Friend' : 'Sign in to Add Friend'}
+              </Button>
+            )}
+
+            <Button mode="text" onPress={() => navigation.navigate('MainTabs')} style={{ marginTop: 8 }}>
+              Go to App
+            </Button>
+          </Card.Content>
+        </Card>
       ) : (
-        <Text style={styles.errorText}>Invalid invite link.</Text>
+        <Text style={[styles.errorText, { color: theme.textSecondary }]}>Invalid invite link.</Text>
       )}
     </View>
   );
@@ -97,16 +105,18 @@ export default function InviteScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
+  card: { width: '100%', borderRadius: 20, paddingVertical: 16 },
+  cardContent: { alignItems: 'center' },
   avatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 16 },
   avatarPlaceholder: {
     width: 100, height: 100, borderRadius: 50,
     justifyContent: 'center', alignItems: 'center', marginBottom: 16,
   },
-  avatarInitial: { color: '#FFF', fontSize: 40, fontWeight: 'bold' },
+  avatarInitial: { fontSize: 40, fontWeight: '700' },
   name: { fontWeight: '700', marginBottom: 6 },
-  subtitle: { color: '#888', marginBottom: 28, textAlign: 'center' },
+  subtitle: { marginBottom: 28, textAlign: 'center' },
   btn: { borderRadius: 10, width: '100%' },
   btnContent: { paddingVertical: 6 },
   successText: { fontSize: 16, fontWeight: '600', marginBottom: 12 },
-  errorText: { color: '#FF3B30', textAlign: 'center' },
+  errorText: { textAlign: 'center' },
 });

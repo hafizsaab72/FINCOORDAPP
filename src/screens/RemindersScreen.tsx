@@ -1,9 +1,12 @@
 import React from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
-import { List, Button, Chip, Divider, Text } from 'react-native-paper';
+import { List, Button, Divider } from 'react-native-paper';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
 import { formatAmount } from '../utils/currency';
+import StatusChip from '../components/StatusChip';
+import EmptyState from '../components/EmptyState';
+import { haptics } from '../utils/haptics';
 
 const isOverdue = (dueDate: string) => new Date(dueDate) < new Date();
 
@@ -18,11 +21,11 @@ export default function RemindersScreen({ navigation }: any) {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {pending.length === 0 ? (
-        <View style={styles.empty}>
-          <Text variant="bodyLarge" style={{ color: '#999', textAlign: 'center' }}>
-            All clear! No pending reminders.
-          </Text>
-        </View>
+        <EmptyState
+          icon="check-circle-outline"
+          title="All clear!"
+          subtitle="No pending reminders."
+        />
       ) : (
         <FlatList
           data={pending}
@@ -30,8 +33,6 @@ export default function RemindersScreen({ navigation }: any) {
           ItemSeparatorComponent={() => <Divider />}
           renderItem={({ item }) => {
             const overdue = isOverdue(item.dueDate);
-            const chipColor = overdue ? '#FF3B30' : '#FFAA00';
-            const chipIcon = overdue ? 'alert-circle-outline' : 'clock-outline';
 
             return (
               <List.Item
@@ -41,35 +42,33 @@ export default function RemindersScreen({ navigation }: any) {
                   <List.Icon
                     {...props}
                     icon={overdue ? 'bell-alert' : 'bell-outline'}
-                    color={chipColor}
+                    color={overdue ? theme.error : theme.warning}
                   />
                 )}
                 right={() => (
                   <View style={styles.actions}>
-                    <Chip
-                      compact
-                      mode="outlined"
-                      icon={chipIcon}
-                      textStyle={{ color: chipColor, fontSize: 10 }}
-                      style={{ borderColor: chipColor }}
-                    >
-                      {overdue ? 'overdue' : 'pending'}
-                    </Chip>
+                    <StatusChip type={overdue ? 'overdue' : 'pending'} />
                     <Button
                       mode="text"
                       compact
                       icon="check"
                       textColor={theme.primary}
-                      onPress={() => markBillHandled(item.id)}
+                      onPress={() => {
+                        haptics.success();
+                        markBillHandled(item.id);
+                      }}
                     >
                       Done
                     </Button>
                   </View>
                 )}
-                onPress={() => navigation.navigate('BillDetail', { billId: item.id })}
+                onPress={() => {
+                  haptics.light();
+                  navigation.navigate('BillDetail', { billId: item.id });
+                }}
                 style={{ backgroundColor: theme.background }}
                 titleStyle={{ color: theme.text }}
-                descriptionStyle={{ color: '#888' }}
+                descriptionStyle={{ color: theme.textSecondary }}
               />
             );
           }}
@@ -81,6 +80,5 @@ export default function RemindersScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 48 },
   actions: { justifyContent: 'center', alignItems: 'flex-end', gap: 4, marginRight: 4 },
 });

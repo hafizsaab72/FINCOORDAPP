@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, Alert, Platform, Modal, KeyboardAvoidingView } from 'react-native';
-import { Text, Button, ActivityIndicator, TextInput } from 'react-native-paper';
+import { Text, Button, ActivityIndicator, TextInput, Surface } from 'react-native-paper';
 import {
   Camera,
   useCameraDevice,
@@ -10,6 +10,7 @@ import {
 import { useAppTheme } from '../context/ThemeContext';
 import { friendsService } from '../services/friendsService';
 import { normalizeCode } from './MyQRCodeScreen';
+import { haptics } from '../utils/haptics';
 
 const QR_SCHEME = 'fincoord://add-friend?userId=';
 
@@ -47,10 +48,12 @@ export default function QRScannerScreen({ navigation }: any) {
       setProcessing(true);
       try {
         await friendsService.sendRequest(userId);
+        haptics.success();
         setStatus('success');
         setStatusMsg('Friend request sent!');
         setTimeout(() => navigation.goBack(), 1800);
       } catch (e: any) {
+        haptics.error();
         setStatus('error');
         setStatusMsg(e.message || 'Could not send friend request.');
       } finally {
@@ -71,12 +74,14 @@ export default function QRScannerScreen({ navigation }: any) {
     setManualLoading(true);
     try {
       await friendsService.sendRequest(userId);
+      haptics.success();
       setManualVisible(false);
       setStatus('success');
       setStatusMsg('Friend request sent!');
       setScanned(true);
       setTimeout(() => navigation.goBack(), 1800);
     } catch (e: any) {
+      haptics.error();
       Alert.alert('Error', e.message || 'Could not send friend request.');
     } finally {
       setManualLoading(false);
@@ -133,7 +138,7 @@ export default function QRScannerScreen({ navigation }: any) {
   if (!device) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.background }]}>
-        <Text style={{ color: '#888', textAlign: 'center' }}>
+        <Text style={{ color: theme.textSecondary, textAlign: 'center' }}>
           No camera device found on this device.
         </Text>
         <Button
@@ -172,15 +177,15 @@ export default function QRScannerScreen({ navigation }: any) {
       {/* Overlay */}
       <View style={styles.overlay}>
         {/* Top area */}
-        <View style={styles.topArea}>
+        <Surface style={styles.topArea} elevation={0}>
           <Text style={styles.instructionText}>
             {scanned ? '' : 'Point at a FinCoord QR code'}
           </Text>
-        </View>
+        </Surface>
 
         {/* Viewfinder row */}
         <View style={styles.middleRow}>
-          <View style={styles.sideMask} />
+          <Surface style={styles.sideMask} elevation={0}><></></Surface>
           <View style={styles.viewfinder}>
             {/* Corner marks */}
             <View style={[styles.corner, styles.cornerTL]} />
@@ -191,11 +196,11 @@ export default function QRScannerScreen({ navigation }: any) {
               <ActivityIndicator color="#FFF" size="large" style={styles.scanSpinner} />
             )}
           </View>
-          <View style={styles.sideMask} />
+          <Surface style={styles.sideMask} elevation={0}><></></Surface>
         </View>
 
         {/* Bottom area */}
-        <View style={styles.bottomArea}>
+        <Surface style={styles.bottomArea} elevation={0}>
           {status === 'success' && (
             <View style={[styles.statusBadge, { backgroundColor: theme.primary }]}>
               <Text style={styles.statusText}>{statusMsg}</Text>
@@ -231,7 +236,7 @@ export default function QRScannerScreen({ navigation }: any) {
           >
             Cancel
           </Button>
-        </View>
+        </Surface>
       </View>
 
       <ManualCodeModal
@@ -271,11 +276,11 @@ function ManualCodeModal({ visible, value, loading, theme, onChange, onSubmit, o
         style={styles.modalBackdrop}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
+        <Surface style={[styles.modalCard, { backgroundColor: theme.surface }]} elevation={3}>
           <Text variant="titleMedium" style={{ color: theme.text, marginBottom: 4 }}>
             Enter friend code
           </Text>
-          <Text variant="bodySmall" style={{ color: '#888', marginBottom: 16 }}>
+          <Text variant="bodySmall" style={{ color: theme.textSecondary, marginBottom: 16 }}>
             Type the 24-character code from your friend's QR code screen.
           </Text>
           <TextInput
@@ -302,7 +307,7 @@ function ManualCodeModal({ visible, value, loading, theme, onChange, onSubmit, o
               Send Request
             </Button>
           </View>
-        </View>
+        </Surface>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -375,7 +380,6 @@ const styles = StyleSheet.create({
     width: '100%',
     borderRadius: 16,
     padding: 24,
-    elevation: 8,
   },
   modalActions: { flexDirection: 'row', gap: 8 },
 });

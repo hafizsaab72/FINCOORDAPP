@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import {
-  View, StyleSheet, TouchableOpacity, ScrollView, Alert, Image, Switch,
+  View, StyleSheet, ScrollView, Alert, Image,
 } from 'react-native';
-import { Text, TextInput, ActivityIndicator, Icon } from 'react-native-paper';
+import { Text, TextInput, ActivityIndicator, Icon, TouchableRipple, Surface, Switch } from 'react-native-paper';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { groupsService } from '../services/groupsService';
 import { GROUP_TYPES, GroupTypeConfig } from '../constants/groupTypes';
+import { haptics } from '../utils/haptics';
 
 /** Auto-inserts '-' after 4th and 7th character while typing a date. */
 function autoFormatDate(raw: string, prev: string): string {
@@ -40,6 +41,7 @@ export default function CustomizeGroupScreen({ route, navigation }: any) {
   const isLocal = !groupId?.match(/^[a-f\d]{24}$/i);
 
   const handlePickPhoto = async () => {
+    haptics.light();
     try {
       const result = await launchImageLibrary({
         mediaType: 'photo',
@@ -104,32 +106,38 @@ export default function CustomizeGroupScreen({ route, navigation }: any) {
     <View style={[styles.root, { backgroundColor: theme.background }]}>
       {/* Custom header */}
       <View style={[styles.header, { borderBottomColor: theme.border, backgroundColor: theme.surface, paddingTop: insets.top }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
-          <Icon source="arrow-left" size={24} color={theme.text} />
-        </TouchableOpacity>
+        <TouchableRipple onPress={() => navigation.goBack()} style={styles.headerBtn}>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <Icon source="arrow-left" size={24} color={theme.text} />
+          </View>
+        </TouchableRipple>
         <Text variant="titleMedium" style={[styles.headerTitle, { color: theme.text }]}>
           Customize group
         </Text>
-        <TouchableOpacity onPress={handleDone} style={styles.headerBtn} disabled={saving}>
-          {saving
-            ? <ActivityIndicator size={18} color={theme.primary} />
-            : <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 16 }}>Done</Text>}
-        </TouchableOpacity>
+        <TouchableRipple onPress={handleDone} style={styles.headerBtn} disabled={saving}>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            {saving
+              ? <ActivityIndicator size={18} color={theme.primary} />
+              : <Text variant="labelLarge" style={{ color: theme.primary }}>Done</Text>}
+          </View>
+        </TouchableRipple>
       </View>
 
       <ScrollView contentContainerStyle={styles.body}>
         {/* Photo picker + Name row */}
         <View style={styles.photoNameRow}>
-          <TouchableOpacity
+          <TouchableRipple
             style={[styles.photoPicker, { borderColor: theme.border }]}
             onPress={handlePickPhoto}
           >
-            {imageUri ? (
-              <Image source={{ uri: imageUri }} style={styles.photoPreview} />
-            ) : (
-              <Icon source="camera-plus" size={28} color="#888" />
-            )}
-          </TouchableOpacity>
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              {imageUri ? (
+                <Image source={{ uri: imageUri }} style={styles.photoPreview} />
+              ) : (
+                <Icon source="camera-plus" size={28} color={theme.textSecondary} />
+              )}
+            </View>
+          </TouchableRipple>
 
           <View style={styles.nameCol}>
             <Text variant="bodySmall" style={{ color: theme.textSecondary, marginBottom: 4 }}>
@@ -150,36 +158,53 @@ export default function CustomizeGroupScreen({ route, navigation }: any) {
         </View>
 
         {/* Type selector */}
-        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Type</Text>
+        <Text variant="titleSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>Type</Text>
         <View style={styles.typeGrid}>
           {GROUP_TYPES.map((t: GroupTypeConfig) => {
             const selected = selectedType === t.key;
             return (
-              <TouchableOpacity
+              <Surface
                 key={t.key}
                 style={[
                   styles.typeCard,
-                  { borderColor: selected ? theme.primary : theme.border, backgroundColor: theme.surface },
-                  selected && { backgroundColor: theme.primary + '14' },
+                  { borderColor: selected ? theme.primary : theme.border },
                 ]}
-                onPress={() => setSelectedType(t.key)}
+                elevation={0}
               >
-                <Icon source={t.icon} size={28} color={selected ? theme.primary : theme.textSecondary} />
-                <Text
-                  variant="labelMedium"
-                  style={{
-                    color: selected ? theme.primary : theme.text,
-                    marginTop: 8,
-                    fontWeight: selected ? '700' : '500',
+                <TouchableRipple
+                  onPress={() => {
+                    haptics.selection();
+                    setSelectedType(t.key);
                   }}
+                  style={{ flex: 1 }}
                 >
-                  {t.label}
-                </Text>
-                {/* Downward pointer for selected */}
-                {selected && (
-                  <View style={[styles.typePointer, { borderTopColor: theme.primary }]} />
-                )}
-              </TouchableOpacity>
+                  <View
+                    style={{
+                      flex: 1,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      paddingVertical: 16,
+                      backgroundColor: selected ? theme.primary + '14' : theme.surface,
+                    }}
+                  >
+                    <Icon source={t.icon} size={28} color={selected ? theme.primary : theme.textSecondary} />
+                    <Text
+                      variant="labelMedium"
+                      style={{
+                        color: selected ? theme.primary : theme.text,
+                        marginTop: 8,
+                        fontWeight: selected ? '700' : '500',
+                      }}
+                    >
+                      {t.label}
+                    </Text>
+                    {/* Downward pointer for selected */}
+                    {selected && (
+                      <View style={[styles.typePointer, { borderTopColor: theme.primary }]} />
+                    )}
+                  </View>
+                </TouchableRipple>
+              </Surface>
             );
           })}
         </View>
@@ -197,9 +222,11 @@ export default function CustomizeGroupScreen({ route, navigation }: any) {
             </View>
             <Switch
               value={tripDatesEnabled}
-              onValueChange={setTripDatesEnabled}
-              trackColor={{ true: theme.primary, false: '#CCC' }}
-              thumbColor="#FFF"
+              onValueChange={value => {
+                haptics.selection();
+                setTripDatesEnabled(value);
+              }}
+              color={theme.primary}
             />
           </View>
 
@@ -217,7 +244,7 @@ export default function CustomizeGroupScreen({ route, navigation }: any) {
                     onChangeText={text => setStartDate(autoFormatDate(text, startDate))}
                     style={[styles.dateInput, { backgroundColor: 'transparent' }]}
                     textColor={theme.text}
-                    placeholderTextColor="#CCC"
+                    placeholderTextColor={theme.textSecondary}
                     underlineColor="transparent"
                     activeUnderlineColor="transparent"
                     keyboardType="numbers-and-punctuation"
@@ -238,7 +265,7 @@ export default function CustomizeGroupScreen({ route, navigation }: any) {
                     onChangeText={text => setEndDate(autoFormatDate(text, endDate))}
                     style={[styles.dateInput, { backgroundColor: 'transparent' }]}
                     textColor={theme.text}
-                    placeholderTextColor="#CCC"
+                    placeholderTextColor={theme.textSecondary}
                     underlineColor="transparent"
                     activeUnderlineColor="transparent"
                     keyboardType="numbers-and-punctuation"
@@ -277,12 +304,13 @@ const styles = StyleSheet.create({
   nameCol: { flex: 1 },
   nameInput: { fontSize: 18, paddingHorizontal: 0, height: 48 },
 
-  sectionLabel: { fontSize: 15, fontWeight: '600', marginBottom: 8 },
+  sectionLabel: { fontWeight: '600', marginBottom: 8 },
   typeGrid: { flexDirection: 'row', gap: 10 },
   typeCard: {
-    flex: 1, alignItems: 'center', paddingVertical: 16,
+    flex: 1,
     borderRadius: 14, borderWidth: 1.5,
     position: 'relative',
+    overflow: 'hidden',
   },
   typePointer: {
     position: 'absolute',

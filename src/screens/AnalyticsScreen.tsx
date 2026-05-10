@@ -6,6 +6,7 @@ import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
 import { formatAmount } from '../utils/currency';
 import ProGate from '../components/ProGate';
+import { haptics } from '../utils/haptics';
 
 const SCREEN_W = Dimensions.get('window').width;
 
@@ -98,7 +99,7 @@ export default function AnalyticsScreen({ route }: any) {
       contentContainerStyle={styles.container}
     >
       {friendName && (
-        <Text variant="titleSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+        <Text variant="labelSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
           WITH {friendName.toUpperCase()}
         </Text>
       )}
@@ -137,33 +138,37 @@ export default function AnalyticsScreen({ route }: any) {
       </View>
 
       {/* Total spent */}
-      <View style={styles.metricRow}>
-        <View style={[styles.metricDot, { backgroundColor: theme.primary }]} />
-        <View style={{ flex: 1 }}>
-          <Text variant="bodyMedium" style={{ color: theme.text, fontWeight: '600' }}>
-            Total spent <Icon source="information-outline" size={14} color={theme.textSecondary} />
-          </Text>
-          <Text variant="headlineSmall" style={{ color: theme.primary, fontWeight: '700', marginTop: 2 }}>
-            {formatAmount(totalSpent, currency)}
-          </Text>
+      <Surface style={[styles.metricCard, { backgroundColor: theme.surface, borderColor: theme.border }]} elevation={0}>
+        <View style={styles.metricRow}>
+          <View style={[styles.metricDot, { backgroundColor: theme.primary }]} />
+          <View style={{ flex: 1 }}>
+            <Text variant="bodyMedium" style={{ color: theme.text, fontWeight: '600' }}>
+              Total spent <Icon source="information-outline" size={14} color={theme.textSecondary} />
+            </Text>
+            <Text variant="headlineSmall" style={{ color: theme.primary, fontWeight: '700', marginTop: 2 }}>
+              {formatAmount(totalSpent, currency)}
+            </Text>
+          </View>
         </View>
-      </View>
+      </Surface>
 
       {/* Your share */}
-      <View style={styles.metricRow}>
-        <View style={[styles.metricDot, { backgroundColor: theme.primary }]} />
-        <View style={{ flex: 1 }}>
-          <Text variant="bodyMedium" style={{ color: theme.text, fontWeight: '600' }}>
-            Your share <Icon source="information-outline" size={14} color={theme.textSecondary} />
-          </Text>
-          <Text variant="headlineSmall" style={{ color: theme.primary, fontWeight: '700', marginTop: 2 }}>
-            {formatAmount(yourShare, currency)}
-          </Text>
-          <Text variant="bodySmall" style={{ color: theme.textSecondary, marginTop: 2 }}>
-            {percentage}% of total group spending
-          </Text>
+      <Surface style={[styles.metricCard, { backgroundColor: theme.surface, borderColor: theme.border }]} elevation={0}>
+        <View style={styles.metricRow}>
+          <View style={[styles.metricDot, { backgroundColor: theme.primary }]} />
+          <View style={{ flex: 1 }}>
+            <Text variant="bodyMedium" style={{ color: theme.text, fontWeight: '600' }}>
+              Your share <Icon source="information-outline" size={14} color={theme.textSecondary} />
+            </Text>
+            <Text variant="headlineSmall" style={{ color: theme.primary, fontWeight: '700', marginTop: 2 }}>
+              {formatAmount(yourShare, currency)}
+            </Text>
+            <Text variant="bodySmall" style={{ color: theme.textSecondary, marginTop: 2 }}>
+              {percentage}% of total group spending
+            </Text>
+          </View>
         </View>
-      </View>
+      </Surface>
 
       {/* Pro banner */}
       {!isPro && (
@@ -176,8 +181,8 @@ export default function AnalyticsScreen({ route }: any) {
           </Text>
           <Button
             mode="contained"
-            style={[styles.proBtn, { backgroundColor: '#7B4FA3' }]}
-            onPress={() => { /* navigate to upgrade */ }}
+            style={[styles.proBtn, { backgroundColor: theme.info }]}
+            onPress={() => { haptics.light(); /* navigate to upgrade */ }}
           >
             Get FinCoord Pro
           </Button>
@@ -187,7 +192,7 @@ export default function AnalyticsScreen({ route }: any) {
       {/* Charts — Pro only */}
       <ProGate feature="Spending Charts">
         <>
-          <Text variant="titleSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+          <Text variant="labelSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
             SPENDING BY CATEGORY
           </Text>
           <Surface style={[styles.chartCard, { backgroundColor: theme.surface, borderColor: theme.border }]} elevation={0}>
@@ -210,7 +215,7 @@ export default function AnalyticsScreen({ route }: any) {
             )}
           </Surface>
 
-          <Text variant="titleSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+          <Text variant="labelSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
             TOP PAYERS
           </Text>
           <Surface style={[styles.chartCard, { backgroundColor: theme.surface, borderColor: theme.border }]} elevation={0}>
@@ -229,7 +234,7 @@ export default function AnalyticsScreen({ route }: any) {
                 topSpenders.map(([payerId, total], idx) => (
                   <View key={payerId} style={[styles.spenderRow, idx > 0 && { borderTopWidth: 1, borderTopColor: theme.border }]}>
                     <View style={[styles.rankBadge, { backgroundColor: theme.primary + '20' }]}>
-                      <Text variant="labelSmall" style={{ color: theme.primary, fontWeight: 'bold' }}>
+                      <Text variant="labelSmall" style={{ color: theme.primary, fontWeight: '700' }}>
                         #{idx + 1}
                       </Text>
                     </View>
@@ -253,8 +258,8 @@ export default function AnalyticsScreen({ route }: any) {
 function EmptyChart({ label, theme }: { label: string; theme: any }) {
   return (
     <View style={styles.emptyChart}>
-      <Icon source="chart-bar" size={32} color={theme.border} />
-      <Text style={{ color: theme.textSecondary, marginTop: 8 }}>{label}</Text>
+      <Icon source="chart-bar" size={32} color={theme.outline} />
+      <Text variant="bodySmall" style={{ color: theme.textSecondary, marginTop: 8 }}>{label}</Text>
     </View>
   );
 }
@@ -262,14 +267,20 @@ function EmptyChart({ label, theme }: { label: string; theme: any }) {
 const styles = StyleSheet.create({
   scrollRoot: { flex: 1 },
   container: { padding: 20, paddingBottom: 40 },
-  sectionLabel: { marginBottom: 10, marginTop: 16, fontSize: 11, letterSpacing: 1 },
+  sectionLabel: { marginBottom: 10, marginTop: 16, letterSpacing: 1 },
   emptyDonut: {
     width: 200, height: 200, borderRadius: 100,
     borderWidth: 12, justifyContent: 'center', alignItems: 'center',
   },
+  metricCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
   metricRow: {
     flexDirection: 'row', alignItems: 'flex-start',
-    marginBottom: 20, gap: 12,
+    padding: 16, gap: 12,
   },
   metricDot: { width: 10, height: 10, borderRadius: 5, marginTop: 6 },
   proCard: {

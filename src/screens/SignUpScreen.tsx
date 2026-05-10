@@ -7,6 +7,7 @@ import { useStore } from '../store/useStore';
 import { authService } from '../services/authService';
 import CountryCodePicker from '../components/CountryCodePicker';
 import { Country, DEFAULT_COUNTRY } from '../utils/countries';
+import { haptics } from '../utils/haptics';
 
 type Tab = 'email' | 'phone';
 type PhoneStep = 'number' | 'otp';
@@ -65,12 +66,13 @@ export default function SignUpScreen({ navigation }: any) {
   };
   const strength = passwordStrength(password);
   const strengthLabel = ['', 'Weak', 'Fair', 'Good', 'Strong', 'Very Strong'][strength] || '';
-  const strengthColor = ['', '#FF3B30', '#FFAA00', '#0F7A5B', '#0F7A5B', '#19A874'][strength] || '#888';
+  const strengthColor = ['', '#FF3B30', '#FFAA00', '#0F7A5B', '#0F7A5B', '#19A874'][strength] || theme.textSecondary;
 
   // ── Email sign-up ─────────────────────────────────────────────────────────
   const handleEmailSignUp = async () => {
     setTouched(true);
     if (name.trim().length < 2 || !emailRegex.test(email) || password.length < 6 || confirmPassword !== password) return;
+    haptics.medium();
     setLoading(true);
     setError('');
     try {
@@ -93,6 +95,7 @@ export default function SignUpScreen({ navigation }: any) {
     if (name.trim().length < 2) { setError('Enter your name first'); return; }
     const digits = localNumber.replace(/\D/g, '');
     if (digits.length < 5) { setError('Enter your local phone number'); return; }
+    haptics.medium();
     setLoading(true);
     setError('');
     try {
@@ -121,6 +124,7 @@ export default function SignUpScreen({ navigation }: any) {
   const handleVerifyOtp = async () => {
     setTouched(true);
     if (otp.length < 4) { setError('Enter the OTP sent to your phone'); return; }
+    haptics.medium();
     setLoading(true);
     setError('');
     try {
@@ -157,7 +161,7 @@ export default function SignUpScreen({ navigation }: any) {
           <Text variant="headlineMedium" style={[styles.title, { color: theme.text }]}>
             Create account
           </Text>
-          <Text variant="bodyMedium" style={styles.subtitle}>
+          <Text variant="bodyMedium" style={[styles.subtitle, { color: theme.textSecondary }]}>
             Start tracking shared expenses for free
           </Text>
         </View>
@@ -274,7 +278,7 @@ export default function SignUpScreen({ navigation }: any) {
               localNumber={localNumber}
               onChangeLocalNumber={t => { setLocalNumber(t); setError(''); }}
             />
-            <Text variant="bodySmall" style={styles.hint}>
+            <Text variant="bodySmall" style={[styles.hint, { color: theme.textSecondary }]}>
               Sending OTP to: {fullPhone || `${country.dialCode}…`}
             </Text>
 
@@ -363,11 +367,11 @@ const styles = StyleSheet.create({
     width: 72, height: 72, borderRadius: 36,
     justifyContent: 'center', alignItems: 'center', marginBottom: 8,
   },
-  title: { fontWeight: 'bold' },
-  subtitle: { color: '#888', textAlign: 'center' },
+  title: { fontWeight: '700' },
+  subtitle: { textAlign: 'center' },
   tabs: { marginBottom: 20 },
   input: { marginBottom: 4 },
-  hint: { color: '#888', marginBottom: 8, marginLeft: 2 },
+  hint: { marginBottom: 8, marginLeft: 2 },
   otpInfo: { marginBottom: 12, fontWeight: '500' },
   serverError: { marginBottom: 8 },
   btn: { marginTop: 12, borderRadius: 10 },

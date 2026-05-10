@@ -7,6 +7,7 @@ import { useStore } from '../store/useStore';
 import { authService } from '../services/authService';
 import CountryCodePicker from '../components/CountryCodePicker';
 import { Country, DEFAULT_COUNTRY } from '../utils/countries';
+import { haptics } from '../utils/haptics';
 
 type Tab = 'email' | 'phone';
 type PhoneStep = 'number' | 'otp';
@@ -53,6 +54,7 @@ export default function SignInScreen({ navigation }: any) {
   const handleEmailSignIn = async () => {
     setTouched(true);
     if (!emailRegex.test(email) || password.length < 6) return;
+    haptics.medium();
     setLoading(true);
     setError('');
     try {
@@ -75,6 +77,7 @@ export default function SignInScreen({ navigation }: any) {
       setError('Enter your local phone number');
       return;
     }
+    haptics.medium();
     setLoading(true);
     setError('');
     try {
@@ -106,6 +109,7 @@ export default function SignInScreen({ navigation }: any) {
       setError('Enter the OTP sent to your phone');
       return;
     }
+    haptics.medium();
     setLoading(true);
     setError('');
     try {
@@ -142,7 +146,7 @@ export default function SignInScreen({ navigation }: any) {
           <Text variant="headlineMedium" style={[styles.title, { color: theme.text }]}>
             Welcome back
           </Text>
-          <Text variant="bodyMedium" style={styles.subtitle}>
+          <Text variant="bodyMedium" style={[styles.subtitle, { color: theme.textSecondary }]}>
             Sign in to your FinCoord account
           </Text>
         </View>
@@ -218,7 +222,7 @@ export default function SignInScreen({ navigation }: any) {
               localNumber={localNumber}
               onChangeLocalNumber={t => { setLocalNumber(t); setError(''); }}
             />
-            <Text variant="bodySmall" style={styles.hint}>
+            <Text variant="bodySmall" style={[styles.hint, { color: theme.textSecondary }]}>
               Sending OTP to: {fullPhone || `${country.dialCode}…`}
             </Text>
 
@@ -307,11 +311,11 @@ const styles = StyleSheet.create({
     width: 72, height: 72, borderRadius: 36,
     justifyContent: 'center', alignItems: 'center', marginBottom: 8,
   },
-  title: { fontWeight: 'bold' },
-  subtitle: { color: '#888' },
+  title: { fontWeight: '700' },
+  subtitle: { textAlign: 'center' },
   tabs: { marginBottom: 20 },
   input: { marginBottom: 4 },
-  hint: { color: '#888', marginBottom: 8, marginLeft: 2 },
+  hint: { marginBottom: 8, marginLeft: 2 },
   otpInfo: { marginBottom: 12, fontWeight: '500' },
   serverError: { marginBottom: 8 },
   btn: { marginTop: 12, borderRadius: 10 },

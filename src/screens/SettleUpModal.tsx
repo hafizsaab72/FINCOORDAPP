@@ -5,12 +5,13 @@ import {
 } from 'react-native';
 import {
   Text, ActivityIndicator,
-  TextInput, Button, Card, Avatar, Divider, TouchableRipple,
+  TextInput, Button, Card, Avatar, Divider, TouchableRipple, Surface, useTheme,
 } from 'react-native-paper';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { groupsService } from '../services/groupsService';
+import { haptics } from '../utils/haptics';
 import { MemberBalance } from '../types';
 
 // ─── helpers ───────────────────────────────────────────────────
@@ -33,6 +34,7 @@ export default function SettleUpModal({ navigation, route }: any) {
   } = route.params ?? {};
 
   const { theme } = useAppTheme();
+  const paperTheme = useTheme();
   const insets = useSafeAreaInsets();
   const currentUser = useStore(s => s.currentUser);
   const homeCurrency = useStore(s => s.currency);
@@ -64,6 +66,7 @@ export default function SettleUpModal({ navigation, route }: any) {
   const selectedMember = allMembers.find((m: MemberBalance) => m.memberId === selectedMemberId);
 
   const handleSelectMember = (member: MemberBalance) => {
+    haptics.selection();
     setSelectedMemberId(member.memberId);
     const net = Math.abs(member.net);
     setAmount(net > 0.005 ? net.toFixed(2) : '');
@@ -108,6 +111,7 @@ export default function SettleUpModal({ navigation, route }: any) {
         await groupsService.settle(groupId, { payerId, receiverId, amount: numAmount, currency });
       }
 
+      haptics.success();
       navigation.goBack();
     } catch {
       Alert.alert('Sync Warning', 'Saved locally but could not sync to server.');
@@ -136,46 +140,48 @@ export default function SettleUpModal({ navigation, route }: any) {
         </View>
 
         <ScrollView contentContainerStyle={styles.selectBody}>
-          <Text variant="headlineSmall" style={{ color: theme.text, fontWeight: '600', marginBottom: 20 }}>
+          <Text variant="headlineSmall" style={{ color: theme.text, marginBottom: 20 }}>
             Which balance do you want to settle?
           </Text>
 
           {settleableMembers.length === 0 ? (
-            <Text style={{ color: theme.textSecondary, textAlign: 'center' }}>
+            <Text variant="bodyMedium" style={{ color: theme.textSecondary, textAlign: 'center' }}>
               Everyone is settled up!
             </Text>
           ) : (
             settleableMembers.map((member: MemberBalance, idx: number) => (
               <React.Fragment key={member.memberId}>
-                {idx > 0 && <Divider />}
-                <TouchableRipple
-                  onPress={() => handleSelectMember(member)}
-                  rippleColor="rgba(0,0,0,0.06)"
-                >
-                  <View style={styles.selectRowInner}>
-                    <Avatar.Text
-                      size={44}
-                      label={getInitials(member.name)}
-                      style={{ backgroundColor: avatarColor(member.memberId) }}
-                    />
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text variant="bodyLarge" style={{ color: theme.text, fontWeight: '600' }}>
-                        {member.name}
-                      </Text>
-                      <Text variant="bodySmall" style={{ color: theme.textSecondary }}>
-                        {member.email}
-                      </Text>
+                {idx > 0 && <Divider style={{ marginVertical: 4 }} />}
+                <Surface elevation={1} style={[styles.memberSurface, { backgroundColor: theme.surface }]}>
+                  <TouchableRipple
+                    onPress={() => handleSelectMember(member)}
+                    rippleColor="rgba(0,0,0,0.06)"
+                  >
+                    <View style={styles.selectRowInner}>
+                      <Avatar.Text
+                        size={44}
+                        label={getInitials(member.name)}
+                        style={{ backgroundColor: avatarColor(member.memberId) }}
+                      />
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text variant="titleMedium" style={{ color: theme.text }}>
+                          {member.name}
+                        </Text>
+                        <Text variant="bodySmall" style={{ color: theme.textSecondary }}>
+                          {member.email}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text variant="labelSmall" style={{ color: member.net > 0 ? theme.primary : paperTheme.colors.error }}>
+                          {member.net > 0 ? 'owes you' : 'you owe'}
+                        </Text>
+                        <Text variant="titleMedium" style={{ color: member.net > 0 ? theme.primary : paperTheme.colors.error }}>
+                          {currency} {Math.abs(member.net).toFixed(2)}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={{ fontSize: 12, color: member.net > 0 ? '#0F7A5B' : '#E8673A' }}>
-                        {member.net > 0 ? 'owes you' : 'you owe'}
-                      </Text>
-                      <Text style={{ fontSize: 16, fontWeight: '700', color: member.net > 0 ? '#0F7A5B' : '#E8673A' }}>
-                        {currency} {Math.abs(member.net).toFixed(2)}
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableRipple>
+                  </TouchableRipple>
+                </Surface>
               </React.Fragment>
             ))
           )}
@@ -232,10 +238,10 @@ export default function SettleUpModal({ navigation, route }: any) {
                   style={{ backgroundColor: avatarColor(selectedMember.memberId) }}
                 />
                 <View style={{ marginLeft: 12 }}>
-                  <Text variant="bodyLarge" style={{ color: theme.text, fontWeight: '600' }}>
+                  <Text variant="titleMedium" style={{ color: theme.text }}>
                     {selectedMember.name}
                   </Text>
-                  <Text style={{ fontSize: 12, color: selectedMember.net > 0 ? '#0F7A5B' : '#E8673A' }}>
+                  <Text variant="labelSmall" style={{ color: selectedMember.net > 0 ? theme.primary : paperTheme.colors.error }}>
                     {selectedMember.net > 0 ? 'owes you' : 'you owe'}{' '}
                     {currency} {Math.abs(selectedMember.net).toFixed(2)}
                   </Text>
@@ -249,11 +255,11 @@ export default function SettleUpModal({ navigation, route }: any) {
             value={amount}
             onChangeText={setAmount}
             keyboardType="decimal-pad"
-            mode="flat"
+            mode="outlined"
             style={[styles.amountInput, { backgroundColor: 'transparent' }]}
             textColor={theme.text}
-            underlineColor={theme.primary}
-            activeUnderlineColor={theme.primary}
+            outlineColor={theme.border}
+            activeOutlineColor={theme.primary}
             left={<TextInput.Affix text={currency} />}
           />
 
@@ -275,8 +281,8 @@ export default function SettleUpModal({ navigation, route }: any) {
             onPress={handleSave}
             disabled={saving}
             loading={saving}
-            style={[styles.recordBtn, { backgroundColor: '#E8673A' }]}
-            labelStyle={styles.recordBtnLabel}
+            style={[styles.recordBtn, { backgroundColor: paperTheme.colors.error }]}
+            labelStyle={{ color: paperTheme.colors.onError, fontWeight: '700', fontSize: 16 }}
           >
             Record payment
           </Button>
@@ -297,8 +303,9 @@ const styles = StyleSheet.create({
 
   // Select step
   selectBody: { padding: 20 },
+  memberSurface: { borderRadius: 12, overflow: 'hidden', marginBottom: 8 },
   selectRowInner: {
-    flexDirection: 'row', alignItems: 'center', width: '100%',
+    flexDirection: 'row', alignItems: 'center', padding: 14, width: '100%',
   },
 
   // Amount step
@@ -310,5 +317,4 @@ const styles = StyleSheet.create({
   recordBtn: {
     marginTop: 32, borderRadius: 14, paddingVertical: 6,
   },
-  recordBtnLabel: { color: '#FFF', fontWeight: '700', fontSize: 16 },
 });

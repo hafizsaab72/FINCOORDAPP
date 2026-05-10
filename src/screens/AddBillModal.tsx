@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
-import { TextInput, Button, Text, Switch, HelperText } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { TextInput, Button, Text, Switch, HelperText, IconButton } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DatePickerModal } from 'react-native-paper-dates';
 import { useStore } from '../store/useStore';
+import { Bill } from '../types';
 import { useAppTheme } from '../context/ThemeContext';
 import { getCurrencyIcon, getSymbol } from '../utils/currency';
 import { billsService } from '../services/billsService';
 import { scheduleBillReminder } from '../utils/notifications';
+import { haptics } from '../utils/haptics';
 
 export default function AddBillModal({ navigation }: any) {
   const { theme } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const addBill   = useStore(state => state.addBill);
   const updateBill = useStore(state => state.updateBill);
   const token     = useStore(state => state.token);
@@ -58,32 +63,60 @@ export default function AddBillModal({ navigation }: any) {
 
     // Sync to backend in background
     if (token) {
+      const { id, ...billPayload } = bill;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      void id;
       billsService
-        .create({ ...bill, id: undefined as any })
+        .create(billPayload as Omit<Bill, 'id'>)
         .then(res => {
           // Swap local id for the server-assigned id
-          if (res?.bill?._id || res?.bill?.id) {
-            const serverId = res.bill._id ?? res.bill.id;
+          const serverBill = res?.bill as any;
+          if (serverBill?._id || serverBill?.id) {
+            const serverId = serverBill._id ?? serverBill.id;
             updateBill(localId, { ...bill, id: serverId } as any);
           }
         })
         .catch(() => {/* silent fail — local bill is already saved */});
     }
 
+    haptics.success();
     navigation.goBack();
   };
 
   const onConfirmDate = React.useCallback(
-    (params: { date: Date }) => {
+    (params: any) => {
       setDateOpen(false);
       setDueDate(params.date);
     },
     [setDateOpen, setDueDate],
   );
 
+  const openDatePicker = () => {
+    haptics.light();
+    setDateOpen(true);
+  };
+
   return (
+    <SafeAreaView style={[styles.scrollRoot, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
+      {/* Drag handle */}
+      <View style={[styles.dragHandle, { marginTop: insets.top + 8 }]} />
+
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: theme.border }]}>
+        <IconButton
+          icon="close"
+          size={24}
+          iconColor={theme.text}
+          onPress={() => navigation.goBack()}
+        />
+        <Text variant="headlineSmall" style={[styles.headerTitle, { color: theme.text }]}>
+          Add Bill
+        </Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
     <KeyboardAvoidingView
-      style={[styles.scrollRoot, { backgroundColor: theme.background }]}
+      style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
     <ScrollView
@@ -97,9 +130,11 @@ export default function AddBillModal({ navigation }: any) {
         value={title}
         onChangeText={setTitle}
         onBlur={() => setTouched(true)}
-        left={<TextInput.Icon icon="receipt-text" />}
+        left={<TextInput.Icon icon="receipt-outline" />}
         error={titleError}
         style={styles.input}
+        outlineColor={theme.textSecondary}
+        activeOutlineColor={theme.primary}
       />
       {titleError && (
         <HelperText type="error" visible>
@@ -117,6 +152,8 @@ export default function AddBillModal({ navigation }: any) {
         onBlur={() => setTouched(true)}
         error={amountError}
         style={styles.input}
+        outlineColor={theme.textSecondary}
+        activeOutlineColor={theme.primary}
       />
       {amountError && (
         <HelperText type="error" visible>
@@ -132,23 +169,25 @@ export default function AddBillModal({ navigation }: any) {
         left={<TextInput.Icon icon="tag-outline" />}
         placeholder="e.g. Rent, Utilities, Subscription"
         style={styles.input}
+        outlineColor={theme.textSecondary}
+        activeOutlineColor={theme.primary}
       />
 
       {/* Due Date */}
-      <TouchableOpacity
-        activeOpacity={0.7}
-        onPress={() => setDateOpen(true)}
-        style={[styles.dateRow, { borderColor: theme.border, backgroundColor: theme.surface }]}
-      >
-        <TextInput.Icon icon="calendar" />
-        <View style={{ flex: 1, marginLeft: 8 }}>
-          <Text variant="bodySmall" style={{ color: theme.textSecondary }}>Due Date</Text>
-          <Text variant="bodyLarge" style={{ color: theme.text }}>
-            {dueDate.toLocaleDateString()}
-          </Text>
+      <Pressable onPress={openDatePicker}>
+        <View pointerEvents="none">
+          <TextInput
+            label="Due Date"
+            mode="outlined"
+            value={dueDate.toLocaleDateString()}
+            left={<TextInput.Icon icon="calendar" />}
+            right={<TextInput.Icon icon="chevron-right" />}
+            outlineColor={theme.textSecondary}
+            activeOutlineColor={theme.primary}
+            style={styles.input}
+          />
         </View>
-        <TextInput.Icon icon="chevron-right" />
-      </TouchableOpacity>
+      </Pressable>
 
       <DatePickerModal
         locale="en"
@@ -160,7 +199,7 @@ export default function AddBillModal({ navigation }: any) {
         validRange={{ startDate: new Date() }}
       />
 
-      <View style={[styles.switchRow, { borderColor: theme.border }]}>
+      <View style={[styles.switchRow, { borderTopColor: theme.border }]}>
         <View style={styles.switchLabel}>
           <Text variant="bodyLarge" style={{ color: theme.text }}>
             Recurring Bill
@@ -180,29 +219,40 @@ export default function AddBillModal({ navigation }: any) {
         mode="contained"
         onPress={handleSave}
         icon="check"
-        style={styles.button}
+        style={[styles.button, { borderRadius: 12 }]}
         contentStyle={styles.buttonContent}
       >
         Save Bill
       </Button>
     </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   scrollRoot: { flex: 1 },
-  container: { padding: 20, paddingBottom: 40 },
-  input: { marginBottom: 4 },
-  dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginTop: 8,
+  dragHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#C5C5C7',
+    alignSelf: 'center',
     marginBottom: 8,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+  },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '600' },
+  headerSpacer: { width: 48 },
+  container: { padding: 20, paddingBottom: 40 },
+  input: { marginBottom: 4 },
+
   switchRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -300,39 +300,3 @@ export const useStore = create<AppState>()(
   ),
 );
 
-/**
- * Balance Calculation Selector
- * Returns net balance per person: positive = owed money, negative = owes money.
- */
-export const useBalances = (groupId: string) => {
-  const allExpenses = useStore(state => state.expenses);
-  const expenses = allExpenses.filter(e => e.groupId === groupId);
-
-  const balances: Record<string, number> = {};
-
-  for (const expense of expenses) {
-    const participants = Object.keys(expense.splitDetails);
-
-    // Always credit the payer regardless of splitDetails
-    balances[expense.payerId] = (balances[expense.payerId] || 0) + expense.amount;
-
-    if (participants.length === 0) continue;
-
-    if (expense.splitMethod === 'equal') {
-      const share = expense.amount / participants.length;
-      for (const userId of participants) {
-        balances[userId] = (balances[userId] || 0) - share;
-      }
-    } else if (expense.splitMethod === 'percentage') {
-      for (const [userId, pct] of Object.entries(expense.splitDetails)) {
-        balances[userId] = (balances[userId] || 0) - (expense.amount * pct) / 100;
-      }
-    } else {
-      for (const [userId, amt] of Object.entries(expense.splitDetails)) {
-        balances[userId] = (balances[userId] || 0) - amt;
-      }
-    }
-  }
-
-  return balances;
-};

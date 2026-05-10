@@ -24,7 +24,7 @@ import MultiPayerSelector from '../components/MultiPayerSelector';
 // ── Types ──────────────────────────────────────────────────────
 type InternalView = 'main' | 'participants' | 'split_quick' | 'split_advanced';
 type QuickSplit = 'you_paid_equal' | 'you_paid_full' | 'they_paid_equal' | 'they_paid_full';
-type AdvSplitType = 'equal' | 'exact' | 'percentage';
+type AdvSplitType = 'equal' | 'exact' | 'percentage' | 'adjustment';
 interface Participant { id: string; name: string }
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -41,19 +41,23 @@ const avatarColor = (id: string) => {
 const fmtAmt = (sym: string, v: number) =>
   `${sym}${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-function mapSplitTypeToBackend(type: SplitOptionType): SplitType {
+export function mapSplitTypeToBackend(type: AdvSplitType): SplitType {
   switch (type) {
     case 'exact': return 'unequal';
     case 'adjustment': return 'itemized';
-    default: return type;
+    case 'percentage': return 'percentage';
+    case 'equal': return 'equal';
+    default: return 'equal';
   }
 }
 
-function mapBackendToSplitType(type: string): SplitOptionType {
+export function mapBackendToSplitType(type: string): AdvSplitType {
   switch (type) {
     case 'unequal': return 'exact';
     case 'itemized': return 'adjustment';
-    default: return (type as SplitOptionType) ?? 'equal';
+    case 'percentage': return 'percentage';
+    case 'equal': return 'equal';
+    default: return 'equal';
   }
 }
 const fmtAmt = (sym: string, v: number) =>
@@ -261,32 +265,57 @@ export default function AddExpenseModal({ navigation, route }: any) {
     const included = allParticipants.filter(p => includedMembers.has(p.id));
     const ids = included.length > 0 ? included.map(p => p.id) : allParticipants.map(p => p.id);
 
+    const totalMinor = toMinorUnits(numericAmount);
+
+    // Convert payments to minor units
     const paymentsOut: Payment[] = payments
       .filter(p => p.amount > 0)
-      .map(p => ({ userId: p.userId, amount: p.amount, currency }));
+      .map(p => ({ userId: p.userId, amount: toMinorUnits(p.amount), currency }));
 
     const splits: SplitEntry[] = [];
 
     switch (advSplitType) {
       case 'equal': {
-        const share = numericAmount / ids.length;
-        for (const id of ids) {
-          splits.push({ userId: id, owedAmount: share, shareType: 'equal', shareValue: 1 });
+        const baseShare = Math.floor(totalMinor / ids.length);
+        const remainder = totalMinor - (baseShare * ids.length);
+        for (let i = 0; i < ids.length; i++) {
+          const id = ids[i];
+          const shareMinor = i === ids.length - 1 ? baseShare + remainder : baseShare;
+          splits.push({ userId: id, owedAmount: shareMinor, shareType: 'equal', shareValue: 1 });
         }
         break;
       }
       case 'exact': {
-        for (const id of ids) {
+        let sumSoFar = 0;
+        for (let i = 0; i < ids.length; i++) {
+          const id = ids[i];
           const val = parseFloat(exactMap[id] ?? '0') || 0;
-          splits.push({ userId: id, owedAmount: val, shareType: 'exact', shareValue: val });
+          const valMinor = toMinorUnits(val);
+          if (i === ids.length - 1) {
+            // Last person gets remainder to ensure exact total
+            const remainder = totalMinor - sumSoFar;
+            splits.push({ userId: id, owedAmount: remainder, shareType: 'exact', shareValue: remainder });
+          } else {
+            splits.push({ userId: id, owedAmount: valMinor, shareType: 'exact', shareValue: valMinor });
+            sumSoFar += valMinor;
+          }
         }
         break;
       }
       case 'percentage': {
-        for (const id of ids) {
+        let sumSoFar = 0;
+        for (let i = 0; i < ids.length; i++) {
+          const id = ids[i];
           const pct = parseFloat(percentageMap[id] ?? '0') || 0;
-          const owed = (numericAmount * pct) / 100;
-          splits.push({ userId: id, owedAmount: owed, shareType: 'percentage', shareValue: pct });
+          if (i === ids.length - 1) {
+            // Last person gets remainder to ensure exact total
+            const remainder = totalMinor - sumSoFar;
+            splits.push({ userId: id, owedAmount: remainder, shareType: 'percentage', shareValue: pct });
+          } else {
+            const owedMinor = Math.floor((totalMinor * pct) / 100);
+            splits.push({ userId: id, owedAmount: owedMinor, shareType: 'percentage', shareValue: pct });
+            sumSoFar += owedMinor;
+          }
         }
         break;
       }
@@ -363,8 +392,8 @@ export default function AddExpenseModal({ navigation, route }: any) {
         description: description.trim(),
         baseCurrency: currency,
         splitType: payload.splitType,
-        payments: payload.payments.map(p => ({ ...p, amount: toMinorUnits(p.amount) })),
-        splits: payload.splits.map(s => ({ ...s, owedAmount: toMinorUnits(s.owedAmount) })),
+        payments: payload.payments,
+        splits: payload.splits,
         date: isoDate,
       };
       updateExpense(editExpense.id, { amount: numericAmount, notes: description.trim(), currency, splitMethod, splitDetails });
@@ -392,8 +421,8 @@ export default function AddExpenseModal({ navigation, route }: any) {
             description: description.trim(),
             totalAmount: toMinorUnits(numericAmount),
             baseCurrency: currency,
-            payments: payload.payments.map(p => ({ ...p, amount: toMinorUnits(p.amount) })),
-            splits: payload.splits.map(s => ({ ...s, owedAmount: toMinorUnits(s.owedAmount) })),
+            payments: payload.payments,
+            splits: payload.splits,
             splitType: payload.splitType,
             notes: description.trim(),
             date: isoDate,

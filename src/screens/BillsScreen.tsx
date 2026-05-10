@@ -1,16 +1,13 @@
 import React from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
-import { List, FAB, Chip, Divider, Text } from 'react-native-paper';
+import { List, FAB, Divider, Text } from 'react-native-paper';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
 import { Bill } from '../types';
 import { formatAmount } from '../utils/currency';
-
-const STATUS_CONFIG = {
-  pending: { color: '#FFAA00', icon: 'clock-outline' },
-  overdue: { color: '#FF3B30', icon: 'alert-circle-outline' },
-  handled: { color: '#0F7A5B', icon: 'check-circle-outline' },
-};
+import StatusChip from '../components/StatusChip';
+import EmptyState from '../components/EmptyState';
+import { haptics } from '../utils/haptics';
 
 export default function BillsScreen({ navigation }: any) {
   const { theme } = useAppTheme();
@@ -18,7 +15,6 @@ export default function BillsScreen({ navigation }: any) {
   const currency = useStore(state => state.currency);
 
   const renderBill = ({ item }: { item: Bill }) => {
-    const config = STATUS_CONFIG[item.status];
     return (
       <List.Item
         title={item.title}
@@ -31,21 +27,16 @@ export default function BillsScreen({ navigation }: any) {
             <Text variant="titleSmall" style={[styles.amount, { color: theme.text }]}>
               {formatAmount(item.amount, currency)}
             </Text>
-            <Chip
-              compact
-              mode="outlined"
-              icon={config.icon}
-              textStyle={{ color: config.color, fontSize: 10 }}
-              style={[styles.chip, { borderColor: config.color }]}
-            >
-              {item.status}
-            </Chip>
+            <StatusChip type={item.status === 'handled' ? 'handled' : item.status === 'overdue' ? 'overdue' : 'pending'} />
           </View>
         )}
-        onPress={() => navigation.navigate('BillDetail', { billId: item.id })}
+        onPress={() => {
+          haptics.light();
+          navigation.navigate('BillDetail', { billId: item.id });
+        }}
         style={{ backgroundColor: theme.background }}
         titleStyle={{ color: theme.text }}
-        descriptionStyle={{ color: '#888' }}
+        descriptionStyle={{ color: theme.textSecondary }}
       />
     );
   };
@@ -58,11 +49,16 @@ export default function BillsScreen({ navigation }: any) {
         renderItem={renderBill}
         ItemSeparatorComponent={() => <Divider />}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text variant="bodyLarge" style={{ color: '#999', textAlign: 'center' }}>
-              No bills tracked yet.{'\n'}Tap + to add your first bill.
-            </Text>
-          </View>
+          <EmptyState
+            icon="receipt-text-outline"
+            title="No bills tracked yet."
+            subtitle="Tap + to add your first bill."
+            action={{
+              label: 'Add Bill',
+              onPress: () => navigation.navigate('AddBillModal'),
+              icon: 'plus',
+            }}
+          />
         }
       />
 
@@ -70,7 +66,10 @@ export default function BillsScreen({ navigation }: any) {
         icon="plus"
         style={[styles.fab, { backgroundColor: theme.primary }]}
         color="#FFF"
-        onPress={() => navigation.navigate('AddBillModal')}
+        onPress={() => {
+          haptics.light();
+          navigation.navigate('AddBillModal');
+        }}
       />
     </View>
   );
@@ -80,7 +79,5 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   rightContent: { justifyContent: 'center', alignItems: 'flex-end', gap: 4, marginRight: 4 },
   amount: { fontWeight: '600' },
-  chip: { height: 24 },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 48 },
   fab: { position: 'absolute', bottom: 24, right: 24 },
 });

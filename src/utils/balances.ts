@@ -29,7 +29,7 @@ export function computeBalances(
       ...e.splits.map(s => s.userId),
     ]);
 
-    for (const uid of allUserIds) {
+    for (const uid of Array.from(allUserIds)) {
       if (!memberMap[uid]) {
         memberMap[uid] = {
           name: nameMap?.[uid] ?? e.participantNames?.[uid] ?? uid,
@@ -53,25 +53,17 @@ export function computeBalances(
     memberMap[uid].net = memberMap[uid].paid - memberMap[uid].owed;
   }
 
-  let totalYouOwe = 0;      // money I owe to others (they over-paid)
-  let totalOwedToYou = 0;   // money others owe to me (they under-paid)
-
-  for (const [uid, info] of Object.entries(memberMap)) {
-    if (uid === myId) continue;
-    if (info.net > 0) {
-      // They over-paid → they are owed money → I may owe them
-      totalYouOwe += info.net;
-    } else if (info.net < 0) {
-      // They under-paid → they owe money → they may owe me
-      totalOwedToYou += Math.abs(info.net);
-    }
-  }
-
-  // For exact per-user net (used by UI)
+  // Compute from the current user's perspective
+  // My net > 0: I'm owed money → totalOwedToYou
+  // My net < 0: I owe money → totalYouOwe
   const myNet = memberMap[myId]?.net ?? 0;
-  // Adjust: if myNet > 0, I'm owed money (totalOwedToYou should reflect this)
-  // If myNet < 0, I owe money (totalYouOwe should reflect this)
-  // The pairwise breakdown requires API data; this is approximation.
+  const totalOwedToYou = myNet > 0 ? myNet : 0;  // money others owe to me
+  const totalYouOwe = myNet < 0 ? Math.abs(myNet) : 0;  // money I owe to others
+
+  // Per-member balances from my perspective:
+  // If myNet is positive, others collectively owe me that amount
+  // If myNet is negative, I collectively owe others that amount
+  // We approximate by scaling each member's net relative to the group total
 
   const memberBalances: MemberBalance[] = Object.entries(memberMap)
     .filter(([memberId]) => memberId !== myId)
@@ -80,7 +72,7 @@ export function computeBalances(
       name: info.name,
       email: '',
       isMe: false,
-      net: info.net,
+      net: info.net, // their net (positive = they're owed, negative = they owe)
     }));
 
   return { totalOwedToYou, totalYouOwe, memberBalances };

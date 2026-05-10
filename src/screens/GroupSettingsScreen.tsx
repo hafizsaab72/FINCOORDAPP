@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, FlatList, Alert, Image, ScrollView, Switch, TextInput } from 'react-native';
+import { View, StyleSheet, FlatList, Alert, Image, ScrollView, TextInput } from 'react-native';
 import {
   Text, Button, Divider, List, ActivityIndicator,
-  Portal, Modal, Icon,
+  Portal, Modal, Icon, Surface, Switch,
 } from 'react-native-paper';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
@@ -10,6 +10,7 @@ import { groupsService, ApiGroup } from '../services/groupsService';
 import { friendsService, FriendUser } from '../services/friendsService';
 import { GroupBalancesData, GroupMember } from '../types';
 import { getSymbol } from '../utils/currency';
+import { haptics } from '../utils/haptics';
 
 function MemberAvatar({ member, size = 44 }: { member: GroupMember; size?: number }) {
   const { theme } = useAppTheme();
@@ -21,7 +22,7 @@ function MemberAvatar({ member, size = 44 }: { member: GroupMember; size?: numbe
       width: size, height: size, borderRadius: size / 2,
       backgroundColor: theme.primary, justifyContent: 'center', alignItems: 'center',
     }}>
-      <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: size * 0.4 }}>
+      <Text style={{ color: theme.onPrimary, fontWeight: '700', fontSize: size * 0.4 }}>
         {(member.name?.[0] ?? '?').toUpperCase()}
       </Text>
     </View>
@@ -108,6 +109,7 @@ export default function GroupSettingsScreen({ route, navigation }: any) {
   }, [searchQuery, group]);
 
   const handleToggleSimplify = async (value: boolean) => {
+    haptics.selection();
     setSimplifyDebts(value);
     setTogglingSimplify(true);
     try {
@@ -122,6 +124,7 @@ export default function GroupSettingsScreen({ route, navigation }: any) {
   };
 
   const handleAddMember = async (user: FriendUser) => {
+    haptics.light();
     setAddingId(user._id);
     try {
       const data = await groupsService.addMember(groupId, user._id);
@@ -187,7 +190,7 @@ export default function GroupSettingsScreen({ route, navigation }: any) {
   if (!currentUser) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.background }]}>
-        <Text style={{ color: '#888', textAlign: 'center', marginBottom: 16 }}>
+        <Text variant="bodyMedium" style={{ color: theme.textSecondary, textAlign: 'center', marginBottom: 16 }}>
           Sign in to manage group settings.
         </Text>
         <Button mode="contained" onPress={() => navigation.navigate('SignIn')}
@@ -199,7 +202,7 @@ export default function GroupSettingsScreen({ route, navigation }: any) {
   if (isLocalGroup) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.background }]}>
-        <Text style={{ color: '#888', textAlign: 'center' }}>
+        <Text variant="bodyMedium" style={{ color: theme.textSecondary, textAlign: 'center' }}>
           This group was created offline.{'\n'}Sign in to manage settings.
         </Text>
       </View>
@@ -217,7 +220,7 @@ export default function GroupSettingsScreen({ route, navigation }: any) {
   if (error || !group) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.background }]}>
-        <Text style={{ color: '#FF3B30', textAlign: 'center', marginBottom: 12 }}>
+        <Text variant="bodyMedium" style={{ color: theme.error, textAlign: 'center', marginBottom: 12 }}>
           {error || 'Group not found.'}
         </Text>
         <Button onPress={loadAll}>Retry</Button>
@@ -229,9 +232,9 @@ export default function GroupSettingsScreen({ route, navigation }: any) {
     <ScrollView style={[styles.root, { backgroundColor: theme.background }]} contentContainerStyle={styles.container}>
 
       {/* Group members */}
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>Group members</Text>
+      <Text variant="titleMedium" style={[styles.sectionTitle, { color: theme.text }]}>Group members</Text>
 
-      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <Surface style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]} elevation={0}>
         {group.members.map((member, idx) => {
           const isMe = member._id === currentUser?.id;
           const memberBalance = balances?.memberBalances.find(b => b.memberId === member._id);
@@ -251,19 +254,19 @@ export default function GroupSettingsScreen({ route, navigation }: any) {
                 <View style={{ alignItems: 'flex-end' }}>
                   {!isMe && Math.abs(net) > 0.005 && (
                     <>
-                      <Text style={{ fontSize: 12, color: net > 0 ? '#0F7A5B' : '#E8673A' }}>
+                      <Text variant="bodySmall" style={{ color: net > 0 ? theme.success : theme.error }}>
                         {net > 0 ? 'gets back' : 'owes'}
                       </Text>
-                      <Text style={{ fontSize: 15, fontWeight: '700', color: net > 0 ? '#0F7A5B' : '#E8673A' }}>
+                      <Text variant="titleSmall" style={{ color: net > 0 ? theme.success : theme.error }}>
                         {symbol}{Math.abs(net).toFixed(2)}
                       </Text>
                     </>
                   )}
                   {!isMe && Math.abs(net) <= 0.005 && (
-                    <Text style={{ fontSize: 12, color: theme.textSecondary }}>settled up</Text>
+                    <Text variant="bodySmall" style={{ color: theme.textSecondary }}>settled up</Text>
                   )}
                   {isMe && (
-                    <Text style={{ fontSize: 12, color: theme.primary }}>
+                    <Text variant="bodySmall" style={{ color: theme.primary }}>
                       {member._id === group.createdBy?._id ? 'Owner' : 'You'}
                     </Text>
                   )}
@@ -272,13 +275,14 @@ export default function GroupSettingsScreen({ route, navigation }: any) {
             </React.Fragment>
           );
         })}
-      </View>
+      </Surface>
 
       <Button
         mode="text"
         icon="account-plus-outline"
         textColor={theme.primary}
         onPress={() => {
+          haptics.light();
           setAddModalVisible(true);
           setSearchQuery('');
           setSearchResults([]);
@@ -297,9 +301,9 @@ export default function GroupSettingsScreen({ route, navigation }: any) {
       </Button>
 
       {/* Advanced settings */}
-      <Text style={[styles.sectionTitle, { color: theme.text, marginTop: 24 }]}>Advanced settings</Text>
+      <Text variant="titleMedium" style={[styles.sectionTitle, { color: theme.text, marginTop: 24 }]}>Advanced settings</Text>
 
-      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <Surface style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]} elevation={0}>
         {/* Simplify debts */}
         <View style={styles.settingRow}>
           <View style={styles.settingIcon}>
@@ -314,7 +318,7 @@ export default function GroupSettingsScreen({ route, navigation }: any) {
           <Switch
             value={simplifyDebts}
             onValueChange={handleToggleSimplify}
-            trackColor={{ true: theme.primary, false: '#CCC' }}
+            color={theme.primary}
             disabled={togglingSimplify}
           />
         </View>
@@ -328,41 +332,41 @@ export default function GroupSettingsScreen({ route, navigation }: any) {
           left={props => <List.Icon {...props} icon="call-split" color={theme.textSecondary} />}
           right={() => (
             <View style={styles.proBadge}>
-              <Text style={styles.proBadgeText}>PRO</Text>
+              <Text variant="labelSmall" style={{ color: theme.info, fontWeight: '700' }}>PRO</Text>
             </View>
           )}
           onPress={() => navigation.navigate('AccountTab', { screen: 'Upgrade' })}
           titleStyle={{ color: theme.text, fontWeight: '600' }}
           descriptionStyle={{ color: theme.textSecondary }}
         />
-      </View>
+      </Surface>
 
       {/* Leave group */}
       {!isCreator && (
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 24 }]}>
+        <Surface style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 24 }]} elevation={0}>
           <List.Item
             title="Leave group"
             description={hasOutstanding ? "You can't leave this group because you have outstanding debts with other group members." : undefined}
-            left={props => <List.Icon {...props} icon="logout" color={hasOutstanding ? theme.textSecondary : '#FF9500'} />}
+            left={props => <List.Icon {...props} icon="logout" color={hasOutstanding ? theme.textSecondary : theme.warning} />}
             onPress={handleLeaveGroup}
-            titleStyle={{ color: hasOutstanding ? theme.textSecondary : '#FF9500' }}
+            titleStyle={{ color: hasOutstanding ? theme.textSecondary : theme.warning }}
             descriptionStyle={{ color: theme.textSecondary }}
           />
-        </View>
+        </Surface>
       )}
 
       {/* Danger zone — creator only */}
       {isCreator && (
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 24 }]}>
+        <Surface style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 24 }]} elevation={0}>
           <List.Item
             title="Delete group"
             description="Permanently removes group and all expenses"
-            left={props => <List.Icon {...props} icon="delete-outline" color="#FF3B30" />}
+            left={props => <List.Icon {...props} icon="delete-outline" color={theme.error} />}
             onPress={handleDeleteGroup}
-            titleStyle={{ color: '#FF3B30' }}
+            titleStyle={{ color: theme.error }}
             descriptionStyle={{ color: theme.textSecondary }}
           />
-        </View>
+        </Surface>
       )}
 
       {/* Add member modal */}
@@ -374,11 +378,11 @@ export default function GroupSettingsScreen({ route, navigation }: any) {
         >
           <Text variant="titleMedium" style={[styles.modalTitle, { color: theme.text }]}>Add Member</Text>
           <View style={[styles.searchBox, { borderColor: theme.border }]}>
-            <List.Icon icon="magnify" color="#888" style={{ margin: 0 }} />
+            <List.Icon icon="magnify" color={theme.textSecondary} style={{ margin: 0 }} />
             <TextInput
               style={{ flex: 1, color: theme.text, fontSize: 15, paddingVertical: 4 }}
               placeholder="Search by name, email or phone…"
-              placeholderTextColor="#888"
+              placeholderTextColor={theme.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoCapitalize="none"
@@ -394,7 +398,7 @@ export default function GroupSettingsScreen({ route, navigation }: any) {
               ItemSeparatorComponent={() => <Divider />}
               style={{ maxHeight: 280 }}
               ListEmptyComponent={
-                <Text style={styles.emptyText}>
+                <Text variant="bodySmall" style={[styles.emptyText, { color: theme.textSecondary }]}>
                   {searchQuery.trim().length >= 2 ? 'No users found.' : 'No friends to add yet.'}
                 </Text>
               }
@@ -404,12 +408,12 @@ export default function GroupSettingsScreen({ route, navigation }: any) {
                     ? <Image source={{ uri: item.profilePic }} style={styles.searchAvatar} />
                     : (
                       <View style={[styles.searchAvatar, { backgroundColor: theme.primary, justifyContent: 'center', alignItems: 'center' }]}>
-                        <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{item.name[0]}</Text>
+                        <Text style={{ color: theme.onPrimary, fontWeight: '700' }}>{item.name[0]}</Text>
                       </View>
                     )}
                   <View style={styles.memberInfo}>
                     <Text variant="bodyMedium" style={{ color: theme.text, fontWeight: '600' }}>{item.name}</Text>
-                    <Text variant="bodySmall" style={{ color: '#888' }}>{item.email}</Text>
+                    <Text variant="bodySmall" style={{ color: theme.textSecondary }}>{item.email}</Text>
                   </View>
                   <Button
                     mode="contained" compact
@@ -433,17 +437,16 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   container: { padding: 16, paddingBottom: 40 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
-  sectionTitle: { fontSize: 17, fontWeight: '700', marginBottom: 12, marginTop: 8 },
+  sectionTitle: { fontWeight: '700', marginBottom: 12, marginTop: 8 },
   card: { borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
   memberRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
   memberInfo: { flex: 1 },
   settingRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
   settingIcon: { width: 40, alignItems: 'center' },
   searchAvatar: { width: 36, height: 36, borderRadius: 18 },
-  emptyText: { color: '#999', textAlign: 'center', paddingVertical: 16 },
+  emptyText: { textAlign: 'center', paddingVertical: 16 },
   modal: { marginHorizontal: 16, borderRadius: 16, padding: 20 },
   modalTitle: { fontWeight: '600', marginBottom: 12 },
   searchBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 8, paddingRight: 8, marginBottom: 8 },
   proBadge: { backgroundColor: '#E8D5F7', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'center' },
-  proBadgeText: { fontSize: 11, fontWeight: '700', color: '#7B4FA3' },
 });

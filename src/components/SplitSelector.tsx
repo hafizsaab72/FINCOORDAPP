@@ -1,45 +1,37 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useAppTheme } from '../context/ThemeContext';
+import { SegmentedButtons, useTheme } from 'react-native-paper';
 
-interface Props {
-  selected: 'equal' | 'percentage' | 'custom';
-  onSelect: (type: 'equal' | 'percentage' | 'custom') => void;
+interface SplitSelectorProps {
+  selected: 'equal' | 'percentage' | 'custom' | string;
+  onSelect: (type: string) => void;
+  options?: Array<{ value: string; label: string; icon?: string }>;
 }
 
-export const SplitSelector = ({ selected, onSelect }: Props) => {
-  const { theme } = useAppTheme();
-  const types: Array<'equal' | 'percentage' | 'custom'> = [
-    'equal',
-    'percentage',
-    'custom',
-  ];
+const DEFAULT_OPTIONS = [
+  { value: 'equal', label: 'Equal', icon: 'equal' },
+  { value: 'percentage', label: '%', icon: 'percent' },
+  { value: 'custom', label: 'Custom', icon: 'tune' },
+];
+
+export default function SplitSelector({
+  selected,
+  onSelect,
+  options = DEFAULT_OPTIONS,
+}: SplitSelectorProps) {
+  const theme = useTheme();
 
   return (
-    <View style={styles.container}>
-      {types.map(type => (
-        <TouchableOpacity
-          key={type}
-          style={[styles.btn, { borderColor: theme.border }, selected === type && { backgroundColor: theme.primary, borderColor: theme.primary }]}
-          onPress={() => onSelect(type)}
-        >
-          <Text style={[styles.text, { color: selected === type ? '#FFF' : theme.textSecondary }]}>
-            {type.toUpperCase()}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
+    <SegmentedButtons
+      value={selected}
+      onValueChange={onSelect}
+      buttons={options.map(opt => ({
+        value: opt.value,
+        label: opt.label,
+        icon: opt.icon,
+        checkedColor: theme.colors.onPrimary,
+        uncheckedColor: theme.colors.onSurfaceVariant,
+      }))}
+      style={{ marginBottom: 16 }}
+    />
   );
-};
-
-const styles = StyleSheet.create({
-  container: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  btn: {
-    flex: 1,
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  text: { fontSize: 10, fontWeight: 'bold' },
-});
+}

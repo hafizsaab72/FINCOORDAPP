@@ -1,33 +1,39 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { lightTheme } from '../constants/theme';
+import { Chip, useTheme } from 'react-native-paper';
 
-export const StatusChip = ({
-  type,
-}: {
-  type: 'overdue' | 'pending' | 'settled';
-}) => {
-  const getColor = () => {
-    if (type === 'overdue') return '#FF3B30';
-    if (type === 'settled') return lightTheme.primary;
-    return '#FFCC00';
+interface StatusChipProps {
+  type: 'overdue' | 'pending' | 'settled' | 'paid' | 'handled';
+  compact?: boolean;
+}
+
+export default function StatusChip({ type, compact = true }: StatusChipProps) {
+  const theme = useTheme();
+
+  const getConfig = () => {
+    switch (type) {
+      case 'overdue':
+        return { color: theme.colors.error, icon: 'alert-circle-outline' };
+      case 'pending':
+        return { color: theme.colors.tertiary ?? '#FFAA00', icon: 'clock-outline' };
+      case 'settled':
+      case 'paid':
+      case 'handled':
+        return { color: theme.colors.primary, icon: 'check-circle-outline' };
+      default:
+        return { color: theme.colors.onSurfaceVariant, icon: 'help-circle-outline' };
+    }
   };
 
-  return (
-    <View style={[styles.chip, { borderColor: getColor() }]}>
-      <Text style={[styles.text, { color: getColor() }]}>
-        {type.toUpperCase()}
-      </Text>
-    </View>
-  );
-};
+  const cfg = getConfig();
 
-const styles = StyleSheet.create({
-  chip: {
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  text: { fontSize: 10, fontWeight: '700' },
-});
+  return (
+    <Chip
+      compact={compact}
+      mode="outlined"
+      icon={cfg.icon}
+      textStyle={{ color: cfg.color, fontSize: 10, fontWeight: '700' }}
+      style={{ borderColor: cfg.color }}>
+      {type.toUpperCase()}
+    </Chip>
+  );
+}

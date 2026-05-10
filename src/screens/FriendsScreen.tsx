@@ -1,14 +1,16 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
-  View, StyleSheet, FlatList, Image, Share, Linking, Alert,
-  PermissionsAndroid, Platform, ScrollView, TouchableOpacity, RefreshControl,
+  View, StyleSheet, FlatList, Share, Linking, Alert,
+  PermissionsAndroid, Platform, ScrollView, RefreshControl,
+  StatusBar,
 } from 'react-native';
 import Svg, { Path, G } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   Text, TextInput, Button, Divider, ActivityIndicator,
-  TouchableRipple, Portal, Modal, Icon, Banner,
+  TouchableRipple, Portal, Modal, Banner, IconButton,
+  FAB, Surface,
 } from 'react-native-paper';
 import Contacts from 'react-native-contacts';
 import { useAppTheme } from '../context/ThemeContext';
@@ -17,6 +19,9 @@ import {
   friendsService, FriendUser, FriendRequest, FriendBalance, BalanceSummary,
 } from '../services/friendsService';
 import { normalizeCode } from './MyQRCodeScreen';
+import AppAvatar from '../components/AppAvatar';
+import EmptyState from '../components/EmptyState';
+import { haptics } from '../utils/haptics';
 
 const AVATAR_COLORS = [
   '#E57373', '#F06292', '#BA68C8', '#9575CD', '#7986CB',
@@ -28,7 +33,6 @@ function avatarColor(id: string): string {
   for (let i = 0; i < id.length; i++) h = id.charCodeAt(i) + ((h << 5) - h);
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
-
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
   USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥', CAD: 'CA$',
@@ -45,40 +49,6 @@ function formatAmount(n: number, symbol: string): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
-}
-
-function Avatar({
-  user,
-  size = 48,
-}: {
-  user: { _id?: string; name: string; profilePic?: string };
-  size?: number;
-}) {
-  const id = user._id || user.name;
-  if (user.profilePic) {
-    return (
-      <Image
-        source={{ uri: user.profilePic }}
-        style={{ width: size, height: size, borderRadius: size / 2 }}
-      />
-    );
-  }
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: avatarColor(id),
-        justifyContent: 'center',
-        alignItems: 'center',
-      }}
-    >
-      <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: size * 0.4 }}>
-        {(user.name?.[0] ?? '?').toUpperCase()}
-      </Text>
-    </View>
-  );
 }
 
 function pieColors(id: string): string[] {
@@ -110,9 +80,9 @@ function PieAvatar({
   const id = user._id || user.name;
   if (user.profilePic) {
     return (
-      <Image
-        source={{ uri: user.profilePic }}
-        style={{ width: size, height: size, borderRadius: size / 2 }}
+      <AppAvatar
+        user={user}
+        size={size}
       />
     );
   }
@@ -137,7 +107,7 @@ function PieAvatar({
           alignItems: 'center',
         }}
       >
-        <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: size * 0.35, textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>
+        <Text style={{ color: '#FFF', fontWeight: '700', fontSize: size * 0.35, textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>
           {(user.name?.[0] ?? '?').toUpperCase()}
         </Text>
       </View>
@@ -155,8 +125,6 @@ export default function FriendsScreen({ navigation }: any) {
   const symbol = currencySymbol(currentUser?.currency);
   const myId = currentUser?.id ?? '';
 
-  // Compute balances from local "direct" (non-group) expenses so they
-  // reflect immediately even before API sync.
   const localDirectBalances = useMemo(() => {
     const result: Record<string, number> = {};
     for (const e of localExpenses.filter(ex => ex.groupId === 'direct')) {
@@ -169,10 +137,9 @@ export default function FriendsScreen({ navigation }: any) {
         if (myShare > 0) result[e.payerId] = (result[e.payerId] ?? 0) - myShare;
       }
     }
-    return result; // positive = they owe me, negative = I owe them
+    return result;
   }, [localExpenses, myId]);
 
-  // Build id → name map from participantNames stored on direct expenses
   const localFriendNames = useMemo(() => {
     const result: Record<string, string> = {};
     for (const e of localExpenses.filter(ex => ex.groupId === 'direct')) {
@@ -240,7 +207,6 @@ export default function FriendsScreen({ navigation }: any) {
     setRefreshing(false);
   }, [currentUser]);
 
-  // Re-fetch every time screen comes into focus (e.g. after adding expense)
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   useEffect(() => {
@@ -305,6 +271,7 @@ export default function FriendsScreen({ navigation }: any) {
     setActionIds(s => { const n = new Set(s); n.delete(id); return n; });
 
   const sendRequest = async (userId: string, fromContacts = false) => {
+    haptics.light();
     markBusy(userId);
     try {
       await friendsService.sendRequest(userId);
@@ -315,17 +282,19 @@ export default function FriendsScreen({ navigation }: any) {
   };
 
   const accept = async (req: FriendRequest) => {
+    haptics.success();
     markBusy(req._id);
     try {
       await friendsService.accept(req._id);
       setRequests(prev => prev.filter(r => r._id !== req._id));
       setFriends(prev => [req.sender, ...prev]);
-      load(); // refresh balances
+      load();
     } catch (e: any) { Alert.alert('Error', e.message); }
     finally { unmarkBusy(req._id); }
   };
 
   const reject = async (req: FriendRequest) => {
+    haptics.light();
     markBusy(req._id);
     try {
       await friendsService.reject(req._id);
@@ -354,6 +323,7 @@ export default function FriendsScreen({ navigation }: any) {
     if (!currentUser) { Alert.alert('Sign In Required'); return; }
     const normalized = normalizeCode(codeInput);
     if (!/^[a-f0-9]{24}$/.test(normalized)) { setCodeResult('invalid'); return; }
+    haptics.light();
     setCodeLoading(true); setCodeResult('');
     try {
       await friendsService.sendRequest(normalized);
@@ -372,6 +342,7 @@ export default function FriendsScreen({ navigation }: any) {
     if (!currentUser) { Alert.alert('Sign In Required'); return; }
     const val = directInput.trim();
     if (!val) return;
+    haptics.light();
     setDirectLoading(true); setDirectResult(''); setDirectMatches([]);
     try {
       const data = await friendsService.search(val);
@@ -385,6 +356,7 @@ export default function FriendsScreen({ navigation }: any) {
   };
 
   const handleDirectAddToUser = async (userId: string) => {
+    haptics.light();
     try {
       await friendsService.sendRequest(userId);
       setDirectMatches(prev => prev.filter(u => u._id !== userId));
@@ -413,18 +385,19 @@ export default function FriendsScreen({ navigation }: any) {
   if (!currentUser) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.background }]}>
-        <Text style={{ color: '#888' }}>Sign in to use Friends.</Text>
+        <Text variant="bodyMedium" style={{ color: theme.textSecondary }}>Sign in to use Friends.</Text>
       </View>
     );
   }
 
-  // Net balance summary
-  const totalOwed = balanceSummary?.totalOwedToYou ?? 0;
-  const totalOwe = balanceSummary?.totalYouOwe ?? 0;
+  const localOwed = Object.values(localDirectBalances).reduce((sum, b) => (b > 0 ? sum + b : sum), 0);
+  const localOwe = Object.values(localDirectBalances).reduce((sum, b) => (b < 0 ? sum + Math.abs(b) : sum), 0);
+  const totalOwed = (balanceSummary?.totalOwedToYou ?? 0) + localOwed;
+  const totalOwe = (balanceSummary?.totalYouOwe ?? 0) + localOwe;
   const net = totalOwed - totalOwe;
-  const summaryColor = net > 0 ? theme.primary : net < 0 ? '#FF6B6B' : '#888';
+  const summaryColor = net > 0 ? theme.primary : net < 0 ? theme.error : theme.textSecondary;
+  const hasAnyPeople = friends.length > 0 || Object.keys(localDirectBalances).length > 0;
 
-  // Merge balanced + settled friends into one list
   type ListItem =
     | { type: 'balance'; data: FriendBalance }
     | { type: 'settled'; data: FriendUser };
@@ -432,7 +405,6 @@ export default function FriendsScreen({ navigation }: any) {
   const balancedIds = new Set(balanceSummary?.friends.map(f => f.friendId) ?? []);
   const apiFriendIds = new Set(friends.map(f => f._id));
 
-  // Friends in API list but no shared group expenses — split into those with/without direct balance
   const promotedFromSettled: ListItem[] = [];
   const trulySettledFriends: FriendUser[] = [];
   for (const f of friends.filter(fr => !balancedIds.has(fr._id))) {
@@ -440,24 +412,23 @@ export default function FriendsScreen({ navigation }: any) {
     if (Math.abs(localBal) > 0.005) {
       promotedFromSettled.push({
         type: 'balance' as const,
-        data: { friendId: f._id, name: f.name, email: f.email, profilePic: f.profilePic, netBalance: localBal, breakdown: [] } as FriendBalance,
+        data: { friendId: f._id, name: f.name, email: f.email, profilePic: f.profilePic, netBalance: 0, breakdown: [] } as FriendBalance,
       });
     } else {
       trulySettledFriends.push(f);
     }
   }
 
-  // Build synthetic balance entries for friends only known locally (not in API friends list at all)
   const localOnlyEntries: ListItem[] = Object.entries(localDirectBalances)
     .filter(([id, bal]) => !balancedIds.has(id) && !apiFriendIds.has(id) && Math.abs(bal) > 0.005)
-    .map(([id, bal]) => ({
+    .map(([id]) => ({
       type: 'balance' as const,
       data: {
         friendId: id,
         name: localFriendNames[id] ?? 'Friend',
         email: '',
         profilePic: undefined,
-        netBalance: bal,
+        netBalance: 0,
         breakdown: [],
       } as FriendBalance,
     }));
@@ -473,10 +444,10 @@ export default function FriendsScreen({ navigation }: any) {
 
   const renderSearchRow = (item: FriendUser, fromContacts = false) => (
     <View style={[styles.row, { backgroundColor: theme.surface }]} key={item._id}>
-      <Avatar user={item} />
+      <AppAvatar user={item} size={48} />
       <View style={styles.rowInfo}>
-        <Text variant="bodyLarge" style={{ color: theme.text, fontWeight: '600' }}>{item.name}</Text>
-        <Text variant="bodySmall" style={{ color: '#888' }}>{item.email}</Text>
+        <Text variant="bodyLarge" style={{ color: theme.text }}>{item.name}</Text>
+        <Text variant="bodySmall" style={{ color: theme.textSecondary }}>{item.email}</Text>
       </View>
       <Button
         mode="contained" compact
@@ -491,10 +462,9 @@ export default function FriendsScreen({ navigation }: any) {
   );
 
   const renderBalanceFriend = ({ item }: { item: FriendBalance }) => {
-    // Merge API balance with locally-stored direct expenses
     const effectiveBalance = item.netBalance + (localDirectBalances[item.friendId] ?? 0);
     const owedToMe = effectiveBalance > 0;
-    const amountColor = owedToMe ? theme.primary : '#FF6B6B';
+    const amountColor = owedToMe ? theme.primary : theme.error;
     const label = owedToMe ? 'owes you' : 'you owe';
     const directBalance = localDirectBalances[item.friendId] ?? 0;
     const shown = item.breakdown.slice(0, 2);
@@ -516,40 +486,40 @@ export default function FriendsScreen({ navigation }: any) {
           <View style={styles.avatarCol}>
             <PieAvatar
               user={{ _id: item.friendId, name: item.name, profilePic: item.profilePic }}
-              size={44}
+              size={48}
             />
           </View>
           <View style={styles.balanceInfo}>
             <View style={styles.balanceTopRow}>
-              <Text style={[styles.friendName, { color: theme.text }]} numberOfLines={1}>
+              <Text variant="bodyLarge" style={[styles.friendName, { color: theme.text }]} numberOfLines={1}>
                 {item.name}
               </Text>
               <View style={styles.amountCol}>
-                <Text style={[styles.owesLabel, { color: amountColor }]}>{label}</Text>
-                <Text style={[styles.balanceAmount, { color: amountColor }]}>
+                <Text variant="labelSmall" style={[styles.owesLabel, { color: amountColor }]}>{label}</Text>
+                <Text variant="titleMedium" style={[styles.balanceAmount, { color: amountColor }]}>
                   {formatAmount(Math.abs(effectiveBalance), symbol)}
                 </Text>
               </View>
             </View>
-            {/* Non-group (direct) expenses */}
             {Math.abs(directBalance) > 0.005 && (
-              <Text style={[styles.breakdownLine, { color: '#888' }]} numberOfLines={1}>
-                {item.name.split(' ')[0]} owes you{' '}
-                <Text style={{ color: amountColor, fontWeight: '600' }}>
+              <Text variant="bodySmall" style={[styles.breakdownLine, { color: theme.textSecondary }]} numberOfLines={1}>
+                {directBalance > 0
+                  ? `${item.name.split(' ')[0]} owes you `
+                  : `You owe ${item.name.split(' ')[0]} `}
+                <Text variant="labelMedium" style={{ color: amountColor }}>
                   {formatAmount(Math.abs(directBalance), symbol)}
                 </Text>
                 {' in non-group expenses'}
               </Text>
             )}
-            {/* Group breakdown */}
             {shown.map((b, i) => {
               const owed = b.direction === 'owes_you';
-              const lineColor = owed ? theme.primary : '#E8673A';
+              const lineColor = owed ? theme.primary : theme.warning;
               return (
-                <Text key={i} style={[styles.breakdownLine, { color: '#888' }]} numberOfLines={1}>
+                <Text key={i} variant="bodySmall" style={[styles.breakdownLine, { color: theme.textSecondary }]} numberOfLines={1}>
                   {item.name.split(' ')[0]} {item.name.split(' ').length > 1 ? `${(item.name.split(' ')[1]?.[0] ?? '').toUpperCase()}.` : ''} {' '}
                   {owed ? 'owes you ' : 'you owe '}
-                  <Text style={{ color: lineColor, fontWeight: '600' }}>
+                  <Text variant="labelMedium" style={{ color: lineColor }}>
                     {formatAmount(b.amount, symbol)}
                   </Text>
                   {` in "${b.groupName}"`}
@@ -557,7 +527,7 @@ export default function FriendsScreen({ navigation }: any) {
               );
             })}
             {extra > 0 && (
-              <Text style={[styles.breakdownLine, { color: '#999' }]}>
+              <Text variant="bodySmall" style={[styles.breakdownLine, { color: theme.textSecondary }]}>
                 Plus {extra} more balance{extra > 1 ? 's' : ''}
               </Text>
             )}
@@ -569,9 +539,12 @@ export default function FriendsScreen({ navigation }: any) {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={theme.background === '#121212' ? 'light-content' : 'dark-content'} />
 
-      {/* ── Header ── */}
-      <View style={[styles.header, { backgroundColor: theme.background }]}>
+      {/* ═══════════════════════════════════════════════════════════════
+          HEADER — fixed, with safe-area padding
+         ═══════════════════════════════════════════════════════════════ */}
+      <View style={[styles.header, { paddingTop: insets.top + 12, backgroundColor: theme.background }]}>
         {searchVisible ? (
           <TextInput
             mode="flat"
@@ -591,48 +564,61 @@ export default function FriendsScreen({ navigation }: any) {
           />
         ) : (
           <>
-            <TouchableOpacity onPress={() => setSearchVisible(true)} style={styles.headerIconBtn}>
-              <Icon source="magnify" size={26} color={theme.text} />
-            </TouchableOpacity>
-            <View style={styles.headerSpacer} />
-            {requests.length > 0 && (
-              <TouchableOpacity
-                onPress={() => setView(view === 'requests' ? 'balances' : 'requests')}
-                style={[
-                  styles.requestsBadge,
-                  {
-                    backgroundColor: view === 'requests' ? theme.primary : 'transparent',
-                    borderColor: theme.primary,
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    color: view === 'requests' ? '#FFF' : theme.primary,
-                    fontSize: 12,
-                    fontWeight: '700',
-                  }}
+            <Text variant="headlineSmall" style={[styles.headerTitle, { color: theme.text }]}>Friends</Text>
+            <View style={styles.headerActions}>
+              {requests.length > 0 && (
+                <TouchableRipple
+                  onPress={() => setView(view === 'requests' ? 'balances' : 'requests')}
+                  style={[
+                    styles.requestsBadge,
+                    {
+                      backgroundColor: view === 'requests' ? theme.primary : 'transparent',
+                      borderColor: theme.primary,
+                    },
+                  ]}
+                  rippleColor="rgba(0,0,0,0.1)"
                 >
-                  {requests.length} pending
-                </Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={() => setShareModalVisible(true)}>
-              <Text style={[styles.addFriendsBtn, { color: theme.primary }]}>Add friends</Text>
-            </TouchableOpacity>
+                  <Text
+                    variant="labelSmall"
+                    style={{
+                      color: view === 'requests' ? '#FFF' : theme.primary,
+                    }}
+                  >
+                    {requests.length}
+                  </Text>
+                </TouchableRipple>
+              )}
+              <IconButton
+                icon="magnify"
+                size={24}
+                iconColor={theme.text}
+                onPress={() => setSearchVisible(true)}
+                style={styles.headerIconBtn}
+              />
+              <IconButton
+                icon="account-plus-outline"
+                size={24}
+                iconColor={theme.primary}
+                onPress={() => setShareModalVisible(true)}
+                style={styles.headerIconBtn}
+              />
+            </View>
           </>
         )}
       </View>
 
-      {/* ── Search results ── */}
+      {/* ═══════════════════════════════════════════════════════════════
+          CONTENT
+         ═══════════════════════════════════════════════════════════════ */}
+
       {searchVisible ? (
         <View style={{ flex: 1 }}>
           {query.trim().length < 2 ? (
-            <Text style={styles.emptyText}>Type at least 2 characters to search.</Text>
+            <Text variant="bodyMedium" style={[styles.emptyText, { color: theme.textSecondary }]}>Type at least 2 characters to search.</Text>
           ) : searching ? (
             <ActivityIndicator color={theme.primary} style={{ marginTop: 24 }} />
           ) : searchResults.length === 0 ? (
-            <Text style={styles.emptyText}>No users found.</Text>
+            <Text variant="bodyMedium" style={[styles.emptyText, { color: theme.textSecondary }]}>No users found.</Text>
           ) : (
             <FlatList
               data={searchResults}
@@ -644,13 +630,12 @@ export default function FriendsScreen({ navigation }: any) {
         </View>
 
       ) : view === 'requests' ? (
-        /* ── Requests view ── */
         <View style={{ flex: 1 }}>
           <View style={[styles.sectionBar, { backgroundColor: theme.surface }]}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Friend Requests</Text>
-            <TouchableOpacity onPress={() => setView('balances')}>
-              <Text style={{ color: theme.primary, fontWeight: '600' }}>Done</Text>
-            </TouchableOpacity>
+            <Text variant="titleMedium" style={[styles.sectionTitle, { color: theme.text }]}>Friend Requests</Text>
+            <Button mode="text" onPress={() => setView('balances')}>
+              Done
+            </Button>
           </View>
           <Divider />
           <FlatList
@@ -660,9 +645,9 @@ export default function FriendsScreen({ navigation }: any) {
             ]}
             keyExtractor={x => x.item._id + x.kind}
             ItemSeparatorComponent={() => <Divider />}
-            ListEmptyComponent={<Text style={styles.emptyText}>No pending requests.</Text>}
+            ListEmptyComponent={<Text variant="bodyMedium" style={[styles.emptyText, { color: theme.textSecondary }]}>No pending requests.</Text>}
             ListHeaderComponent={requests.length > 0 ? (
-              <Text style={[styles.reqSectionHeader, { color: '#888' }]}>RECEIVED</Text>
+              <Text variant="labelSmall" style={[styles.reqSectionHeader, { color: theme.textSecondary }]}>RECEIVED</Text>
             ) : null}
             renderItem={({ item: x, index }) => {
               const prevKind = index > 0
@@ -673,15 +658,15 @@ export default function FriendsScreen({ navigation }: any) {
               return (
                 <>
                   {showSentHeader && (
-                    <Text style={[styles.reqSectionHeader, { color: '#888' }]}>SENT</Text>
+                    <Text variant="labelSmall" style={[styles.reqSectionHeader, { color: theme.textSecondary }]}>SENT</Text>
                   )}
                   <View style={[styles.row, { backgroundColor: theme.surface }]}>
-                    <Avatar user={x.kind === 'received' ? x.item.sender : x.item.receiver} />
+                    <AppAvatar user={x.kind === 'received' ? x.item.sender : x.item.receiver} size={48} />
                     <View style={styles.rowInfo}>
-                      <Text variant="bodyLarge" style={{ color: theme.text, fontWeight: '600' }}>
+                      <Text variant="bodyLarge" style={{ color: theme.text }}>
                         {x.kind === 'received' ? x.item.sender.name : x.item.receiver.name}
                       </Text>
-                      <Text variant="bodySmall" style={{ color: '#888' }}>
+                      <Text variant="bodySmall" style={{ color: theme.textSecondary }}>
                         {x.kind === 'received' ? x.item.sender.email : x.item.receiver.email}
                       </Text>
                     </View>
@@ -697,15 +682,15 @@ export default function FriendsScreen({ navigation }: any) {
                           >
                             Accept
                           </Button>
-                          <Button mode="text" compact textColor="#FF3B30" onPress={() => reject(x.item)}>
+                          <Button mode="text" compact textColor={theme.error} onPress={() => reject(x.item)}>
                             Decline
                           </Button>
                         </>
                       ) : (
                         <>
-                          <Text style={{ color: '#888', fontSize: 12, marginBottom: 4 }}>Pending</Text>
+                          <Text variant="labelSmall" style={{ color: theme.textSecondary, marginBottom: 4 }}>Pending</Text>
                           <Button
-                            mode="text" compact textColor="#FF3B30"
+                            mode="text" compact textColor={theme.error}
                             onPress={() => {
                               friendsService.remove(x.item.receiver._id).catch(() => {});
                               setSentRequests(prev => prev.filter(r => r._id !== x.item._id));
@@ -726,7 +711,6 @@ export default function FriendsScreen({ navigation }: any) {
       ) : (
         /* ── Balances view (default) ── */
         <>
-          {/* API error banner */}
           {apiError && (
             <Banner
               visible
@@ -737,47 +721,45 @@ export default function FriendsScreen({ navigation }: any) {
             </Banner>
           )}
 
-          {/* Summary bar */}
-          {!loading && friends.length > 0 && (
-            <View style={[styles.summaryBar, { backgroundColor: theme.surface }]}>
-              <Text style={[styles.summaryText, { color: theme.text }]}>
-                {net === 0 ? (
-                  <Text style={{ color: '#888' }}>Overall, you are settled up</Text>
-                ) : net > 0 ? (
-                  <>
-                    <Text>Overall, you are owed </Text>
-                    <Text style={{ color: summaryColor, fontWeight: '700' }}>
-                      {formatAmount(net, symbol)}
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <Text>Overall, you owe </Text>
-                    <Text style={{ color: summaryColor, fontWeight: '700' }}>
-                      {formatAmount(net, symbol)}
-                    </Text>
-                  </>
-                )}
-              </Text>
-              <Icon source="tune-variant" size={22} color="#999" />
-            </View>
+          {/* Summary card */}
+          {!loading && hasAnyPeople && (
+            <Surface style={styles.summaryCard} elevation={2}>
+              <View style={styles.summaryInner}>
+                <View style={styles.summaryBlock}>
+                  <Text variant="labelSmall" style={[styles.summaryLabel, { color: theme.textSecondary }]}>You are owed</Text>
+                  <Text variant="titleLarge" style={[styles.summaryValue, { color: theme.primary }]}>
+                    {formatAmount(totalOwed, symbol)}
+                  </Text>
+                </View>
+                <View style={[styles.summaryDivider, { backgroundColor: theme.border }]} />
+                <View style={styles.summaryBlock}>
+                  <Text variant="labelSmall" style={[styles.summaryLabel, { color: theme.textSecondary }]}>You owe</Text>
+                  <Text variant="titleLarge" style={[styles.summaryValue, { color: theme.error }]}>
+                    {formatAmount(totalOwe, symbol)}
+                  </Text>
+                </View>
+                <View style={[styles.summaryDivider, { backgroundColor: theme.border }]} />
+                <View style={styles.summaryBlock}>
+                  <Text variant="labelSmall" style={[styles.summaryLabel, { color: theme.textSecondary }]}>Net</Text>
+                  <Text variant="titleLarge" style={[styles.summaryValue, { color: summaryColor }]}>
+                    {net >= 0 ? '+' : '-'}{formatAmount(Math.abs(net), symbol)}
+                  </Text>
+                </View>
+              </View>
+            </Surface>
           )}
-          <Divider />
 
           {loading ? (
             <ActivityIndicator color={theme.primary} style={{ marginTop: 40 }} />
           ) : (
             <FlatList
+              style={{ flex: 1 }}
               data={displayedList}
               keyExtractor={item =>
                 item.type === 'balance' ? item.data.friendId : item.data._id
               }
-              ItemSeparatorComponent={() => (
-                <View style={styles.connectorWrap}>
-                  <View style={styles.connectorLine} />
-                </View>
-              )}
-              contentContainerStyle={{ paddingBottom: 110 + insets.bottom }}
+              ItemSeparatorComponent={() => <Divider style={{ marginLeft: 76 }} />}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: 110 + insets.bottom }}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -788,7 +770,6 @@ export default function FriendsScreen({ navigation }: any) {
               }
               renderItem={({ item }) => {
                 if (item.type === 'balance') return renderBalanceFriend({ item: item.data });
-                // Settled friend row
                 return (
                   <TouchableRipple
                     onPress={() => navigation.navigate('FriendDetail', {
@@ -802,15 +783,15 @@ export default function FriendsScreen({ navigation }: any) {
                     rippleColor="rgba(0,0,0,0.05)"
                   >
                     <View style={[styles.balanceRow, { backgroundColor: theme.surface }]}>
-                      <Avatar user={item.data} size={48} />
+                      <AppAvatar user={item.data} size={48} />
                       <View style={styles.balanceInfo}>
                         <View style={styles.balanceTopRow}>
-                          <Text style={[styles.friendName, { color: theme.text }]} numberOfLines={1}>
+                          <Text variant="bodyLarge" style={[styles.friendName, { color: theme.text }]} numberOfLines={1}>
                             {item.data.name}
                           </Text>
-                          <Text style={{ color: '#888', fontSize: 13 }}>settled up</Text>
+                          <Text variant="bodySmall" style={{ color: theme.textSecondary }}>settled up</Text>
                         </View>
-                        <Text style={[styles.breakdownLine, { color: '#aaa' }]}>
+                        <Text variant="bodySmall" style={[styles.breakdownLine, { color: theme.textSecondary }]}>
                           {item.data.email}
                         </Text>
                       </View>
@@ -823,38 +804,37 @@ export default function FriendsScreen({ navigation }: any) {
                   <View style={styles.settledToggle}>
                     {!showSettled ? (
                       <>
-                        <Text style={{ color: '#888', fontSize: 13, textAlign: 'center', marginBottom: 10 }}>
-                          Hiding {settledCount} settled-up friend{settledCount > 1 ? 's' : ''} over 7 days ago
+                        <Text variant="bodySmall" style={{ color: theme.textSecondary, textAlign: 'center', marginBottom: 10 }}>
+                          Hiding {settledCount} settled-up friend{settledCount > 1 ? 's' : ''}
                         </Text>
-                        <TouchableOpacity
-                          style={[styles.showSettledBtn, { borderColor: theme.primary }]}
+                        <Button
+                          mode="outlined"
                           onPress={() => setShowSettled(true)}
+                          style={[styles.showSettledBtn, { borderColor: theme.primary }]}
+                          textColor={theme.primary}
                         >
-                          <Text style={{ color: theme.primary, fontWeight: '600', fontSize: 14 }}>
-                            Show {settledCount} settled-up friend{settledCount > 1 ? 's' : ''}
-                          </Text>
-                        </TouchableOpacity>
+                          Show {settledCount} settled-up friend{settledCount > 1 ? 's' : ''}
+                        </Button>
                       </>
                     ) : (
-                      <TouchableOpacity
-                        style={[styles.showSettledBtn, { borderColor: '#CCC' }]}
+                      <Button
+                        mode="outlined"
                         onPress={() => setShowSettled(false)}
+                        style={[styles.showSettledBtn, { borderColor: theme.disabled }]}
+                        textColor={theme.textSecondary}
                       >
-                        <Text style={{ color: '#888', fontWeight: '600', fontSize: 14 }}>
-                          Hide settled friends
-                        </Text>
-                      </TouchableOpacity>
+                        Hide settled friends
+                      </Button>
                     )}
                   </View>
                 ) : null
               )}
               ListEmptyComponent={
-                <View style={[styles.centered, { paddingTop: 60 }]}>
-                  <Icon source="account-group-outline" size={64} color="#ccc" />
-                  <Text style={[styles.emptyText, { marginTop: 8 }]}>
-                    No friends yet.{'\n'}Tap "Add friends" to get started.
-                  </Text>
-                </View>
+                <EmptyState
+                  icon="account-group-outline"
+                  title="No friends yet."
+                  subtitle="Tap the + icon to get started."
+                />
               }
             />
           )}
@@ -863,26 +843,15 @@ export default function FriendsScreen({ navigation }: any) {
 
       {/* ── FABs ── */}
       <View style={[styles.fabContainer, { bottom: Math.max(24, insets.bottom + 8) }]} pointerEvents="box-none">
-        <TouchableOpacity
-          style={[styles.scanFab, { backgroundColor: theme.surface }]}
+        <FAB
+          icon="camera-outline"
+          variant="secondary"
           onPress={() => navigation.navigate('QRScanner')}
-          activeOpacity={0.8}
-        >
-          <Icon source="camera-outline" size={20} color={theme.text} />
-          <Text style={{ color: theme.text, marginLeft: 6, fontWeight: '600', fontSize: 14 }}>
-            Scan
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.addExpenseFab, { backgroundColor: theme.primary }]}
+        />
+        <FAB
+          icon="receipt-text-outline"
           onPress={() => navigation.navigate('AddExpenseModal')}
-          activeOpacity={0.85}
-        >
-          <Icon source="receipt-text-outline" size={20} color="#FFF" />
-          <Text style={{ color: '#FFF', marginLeft: 8, fontWeight: '700', fontSize: 15 }}>
-            Add expense
-          </Text>
-        </TouchableOpacity>
+        />
       </View>
 
       {/* ── Add Friend modal ── */}
@@ -897,7 +866,6 @@ export default function FriendsScreen({ navigation }: any) {
           </Text>
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-            {/* QR scan */}
             <Button
               mode="contained" icon="qrcode-scan"
               onPress={() => { closeModal(); navigation.navigate('QRScanner'); }}
@@ -909,8 +877,7 @@ export default function FriendsScreen({ navigation }: any) {
 
             <Divider style={styles.modalDivider} />
 
-            {/* Friend code */}
-            <Text variant="labelMedium" style={[styles.modalSectionLabel, { color: '#888' }]}>
+            <Text variant="labelMedium" style={[styles.modalSectionLabel, { color: theme.textSecondary }]}>
               BY FRIEND CODE
             </Text>
             <TextInput
@@ -923,13 +890,13 @@ export default function FriendsScreen({ navigation }: any) {
               style={styles.directInput} dense
             />
             {codeResult === 'invalid' && (
-              <Text style={styles.inputError}>Invalid code — should be 24 hex characters.</Text>
+              <Text variant="bodySmall" style={[styles.inputError, { color: theme.error }]}>Invalid code — should be 24 hex characters.</Text>
             )}
             {codeResult === 'notfound' && (
-              <Text style={styles.inputError}>No user found with that code.</Text>
+              <Text variant="bodySmall" style={[styles.inputError, { color: theme.error }]}>No user found with that code.</Text>
             )}
             {codeResult === 'sent' && (
-              <Text style={[styles.inputSuccess, { color: theme.primary }]}>
+              <Text variant="labelMedium" style={[styles.inputSuccess, { color: theme.primary }]}>
                 Friend request sent!
               </Text>
             )}
@@ -945,8 +912,7 @@ export default function FriendsScreen({ navigation }: any) {
 
             <Divider style={styles.modalDivider} />
 
-            {/* Email / phone */}
-            <Text variant="labelMedium" style={[styles.modalSectionLabel, { color: '#888' }]}>
+            <Text variant="labelMedium" style={[styles.modalSectionLabel, { color: theme.textSecondary }]}>
               BY EMAIL OR PHONE
             </Text>
             <TextInput
@@ -959,25 +925,25 @@ export default function FriendsScreen({ navigation }: any) {
               style={styles.directInput} dense
             />
             {directResult === 'notfound' && (
-              <Text style={styles.inputError}>No user found with that email or phone.</Text>
+              <Text variant="bodySmall" style={[styles.inputError, { color: theme.error }]}>No user found with that email or phone.</Text>
             )}
             {directResult === 'sent' && (
-              <Text style={[styles.inputSuccess, { color: theme.primary }]}>
+              <Text variant="labelMedium" style={[styles.inputSuccess, { color: theme.primary }]}>
                 Friend request sent!
               </Text>
             )}
             {directResult === 'multiple' && directMatches.length > 0 && (
               <View style={{ marginBottom: 8 }}>
-                <Text style={[styles.inputError, { color: '#888' }]}>
+                <Text variant="bodySmall" style={[styles.inputError, { color: theme.textSecondary }]}>
                   Multiple matches — pick one:
                 </Text>
                 {directMatches.map(u => (
                   <View key={u._id} style={styles.multiRow}>
                     <View style={styles.multiInfo}>
-                      <Text variant="bodyMedium" style={{ color: theme.text, fontWeight: '600' }}>
+                      <Text variant="bodyMedium" style={{ color: theme.text }}>
                         {u.name}
                       </Text>
-                      <Text variant="bodySmall" style={{ color: '#888' }}>{u.email}</Text>
+                      <Text variant="bodySmall" style={{ color: theme.textSecondary }}>{u.email}</Text>
                     </View>
                     <Button
                       mode="contained" compact
@@ -1004,8 +970,7 @@ export default function FriendsScreen({ navigation }: any) {
 
             <Divider style={styles.modalDivider} />
 
-            {/* From contacts */}
-            <Text variant="labelMedium" style={[styles.modalSectionLabel, { color: '#888' }]}>
+            <Text variant="labelMedium" style={[styles.modalSectionLabel, { color: theme.textSecondary }]}>
               FROM CONTACTS
             </Text>
             {!contactsLoaded ? (
@@ -1018,12 +983,12 @@ export default function FriendsScreen({ navigation }: any) {
                 {contactsPermission === 'denied' ? 'Permission Denied' : 'Find from Contacts'}
               </Button>
             ) : contactMatches.length === 0 ? (
-              <Text style={[styles.inputError, { color: '#888' }]}>
+              <Text variant="bodySmall" style={[styles.inputError, { color: theme.textSecondary }]}>
                 None of your contacts are on FinCoord yet.
               </Text>
             ) : (
               <>
-                <Text style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>
+                <Text variant="bodySmall" style={{ color: theme.textSecondary, marginBottom: 8 }}>
                   {contactMatches.length} contact{contactMatches.length > 1 ? 's' : ''} on FinCoord
                 </Text>
                 {contactMatches.map(u => renderSearchRow(u, true))}
@@ -1032,11 +997,10 @@ export default function FriendsScreen({ navigation }: any) {
 
             <Divider style={styles.modalDivider} />
 
-            {/* Invite link */}
-            <Text variant="labelMedium" style={[styles.modalSectionLabel, { color: '#888' }]}>
+            <Text variant="labelMedium" style={[styles.modalSectionLabel, { color: theme.textSecondary }]}>
               INVITE VIA LINK
             </Text>
-            <Text variant="bodySmall" style={styles.modalLink}>{inviteLink}</Text>
+            <Text variant="bodySmall" style={[styles.modalLink, { color: theme.textSecondary }]}>{inviteLink}</Text>
             <Button icon="whatsapp" mode="contained" onPress={shareWhatsApp}
               style={[styles.shareBtn, { backgroundColor: '#25D366' }]}
               contentStyle={styles.shareBtnContent}>
@@ -1062,35 +1026,42 @@ export default function FriendsScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  centered: { justifyContent: 'center', alignItems: 'center', padding: 32 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
 
   // Header
   header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 10, gap: 8,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingBottom: 12, gap: 8,
   },
-  headerIconBtn: { padding: 4 },
-  headerSpacer: { flex: 1 },
+  headerTitle: {},
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  headerIconBtn: { padding: 10 },
   requestsBadge: {
     borderWidth: 1.5, borderRadius: 14,
-    paddingHorizontal: 10, paddingVertical: 3,
+    paddingHorizontal: 12, paddingVertical: 6, marginRight: 2,
   },
-  addFriendsBtn: { fontSize: 16, fontWeight: '600' },
   inlineSearch: { flex: 1, height: 44 },
 
-  // Summary bar
-  summaryBar: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 14,
+  // Summary card
+  summaryCard: {
+    marginHorizontal: 16, marginVertical: 12,
+    borderRadius: 16,
   },
-  summaryText: { flex: 1, fontSize: 15 },
+  summaryInner: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 18,
+  },
+  summaryBlock: { flex: 1, alignItems: 'center' },
+  summaryDivider: { width: StyleSheet.hairlineWidth, height: 36 },
+  summaryLabel: { marginBottom: 4 },
+  summaryValue: {},
 
   // Section bar (requests header)
   sectionBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
   },
-  sectionTitle: { fontSize: 17, fontWeight: '600' },
+  sectionTitle: {},
 
   // Balance friend row
   balanceRow: {
@@ -1098,31 +1069,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 14, gap: 12,
   },
   avatarCol: {
-    width: 44,
+    width: 48,
     alignItems: 'center',
-  },
-  connectorWrap: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-  },
-  connectorLine: {
-    width: 44,
-    alignItems: 'center',
-    borderLeftWidth: 2,
-    borderLeftColor: '#E0E0E0',
-    marginLeft: 21,
-    height: 14,
   },
   balanceInfo: { flex: 1 },
   balanceTopRow: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'flex-start', marginBottom: 4,
   },
-  friendName: { fontSize: 16, fontWeight: '600', flex: 1, marginRight: 8 },
+  friendName: { flex: 1, marginRight: 8 },
   amountCol: { alignItems: 'flex-end' },
-  owesLabel: { fontSize: 11, marginBottom: 1 },
-  balanceAmount: { fontSize: 17, fontWeight: '700' },
-  breakdownLine: { fontSize: 12.5, marginTop: 2, lineHeight: 18 },
+  owesLabel: { marginBottom: 1 },
+  balanceAmount: {},
+  breakdownLine: { marginTop: 2, lineHeight: 18 },
 
   // Generic list row
   row: {
@@ -1132,42 +1091,28 @@ const styles = StyleSheet.create({
   rowInfo: { flex: 1 },
   reqActions: { flexDirection: 'column', alignItems: 'flex-end', gap: 2 },
   reqSectionHeader: {
-    fontSize: 11, fontWeight: '600', letterSpacing: 0.8,
+    letterSpacing: 0.8,
     paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6,
   },
-  emptyText: { color: '#999', textAlign: 'center', padding: 24, lineHeight: 22 },
+  emptyText: { textAlign: 'center', padding: 24, lineHeight: 22 },
 
   // FABs
   fabContainer: {
     position: 'absolute', right: 16,
     flexDirection: 'row', alignItems: 'center', gap: 10,
   },
-  scanFab: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 12, borderRadius: 24,
-    elevation: 4,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2, shadowRadius: 4,
-  },
-  addExpenseFab: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 14, borderRadius: 28,
-    elevation: 6,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3, shadowRadius: 6,
-  },
 
   // Modal
   modal: { marginHorizontal: 16, borderRadius: 16, padding: 20, maxHeight: '88%' },
-  modalTitle: { fontWeight: '600', marginBottom: 12 },
-  modalSectionLabel: { fontSize: 11, letterSpacing: 0.8, marginBottom: 8 },
+  modalTitle: { marginBottom: 12 },
+  modalSectionLabel: { letterSpacing: 0.8, marginBottom: 8 },
   modalDivider: { marginVertical: 16 },
-  modalLink: { color: '#888', marginBottom: 12, fontSize: 11 },
+  modalLink: { marginBottom: 12 },
   shareBtn: { marginBottom: 10, borderRadius: 10 },
   shareBtnContent: { paddingVertical: 4 },
   directInput: { marginBottom: 6 },
-  inputError: { color: '#FF3B30', fontSize: 12, marginBottom: 6 },
-  inputSuccess: { fontSize: 12, fontWeight: '600', marginBottom: 8 },
+  inputError: { marginBottom: 6 },
+  inputSuccess: { marginBottom: 8 },
   multiRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 },
   multiInfo: { flex: 1 },
 
