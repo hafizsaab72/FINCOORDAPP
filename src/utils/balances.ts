@@ -56,9 +56,11 @@ export function computeBalances(
   // Compute from the current user's perspective
   // My net > 0: I'm owed money → totalOwedToYou
   // My net < 0: I owe money → totalYouOwe
+  // NOTE: This is group-level summary, not pairwise. For accurate "you vs them"
+  // balances, use useGroupBalances() which calls the backend API.
   const myNet = memberMap[myId]?.net ?? 0;
-  const totalOwedToYou = myNet > 0 ? myNet : 0;  // money others owe to me
-  const totalYouOwe = myNet < 0 ? Math.abs(myNet) : 0;  // money I owe to others
+  const totalOwedToYou = myNet > 0 ? myNet : 0;  // group-level: sum of all under-payers (approximation)
+  const totalYouOwe = myNet < 0 ? Math.abs(myNet) : 0;  // group-level: sum of all over-payers (approximation)
 
   // Per-member balances from my perspective:
   // If myNet is positive, others collectively owe me that amount
