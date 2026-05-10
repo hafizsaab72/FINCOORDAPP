@@ -1,48 +1,63 @@
-import React, { useLayoutEffect, useMemo } from 'react';
+import React, { useLayoutEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView, FlatList } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import {
-  Text, Surface, Icon, IconButton, SegmentedButtons,
-  List, Chip, Divider, Button,
+  Text,
+  Surface,
+  Icon,
+  IconButton,
+  SegmentedButtons,
+  List,
+  Chip,
+  Divider,
+  Button,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  TouchableRipple,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  Snackbar,
+  useTheme,
 } from 'react-native-paper';
 import { useStore } from '../store/useStore';
-import { useAppTheme } from '../context/ThemeContext';
 import { formatAmount } from '../utils/currency';
 import { Bill } from '../types';
+import SummaryTile from '../components/SummaryTile';
+import DashboardSummary from '../components/DashboardSummary';
+import { useGlobalBalances } from '../hooks/useDashboard';
+import EmptyState from '../components/EmptyState';
+import StatusChip from '../components/StatusChip';
+import { haptics } from '../utils/haptics';
 
 type Segment = 'overview' | 'bills' | 'reminders';
 type BillFilter = 'all' | 'pending' | 'overdue' | 'handled';
 
-const BILL_STATUS_CONFIG = {
-  pending:  { color: '#FFAA00', icon: 'clock-outline' },
-  overdue:  { color: '#FF3B30', icon: 'alert-circle-outline' },
-  handled:  { color: '#0F7A5B', icon: 'check-circle-outline' },
-};
-
 export default function HomeScreen({ navigation }: any) {
-  const { theme } = useAppTheme();
-  const bills              = useStore(state => state.bills);
-  const expenses           = useStore(state => state.expenses);
-  const activities         = useStore(state => state.activities);
-  const currency           = useStore(state => state.currency);
-  const currentUser        = useStore(state => state.currentUser);
-  const markBillHandled    = useStore(state => state.markBillHandled);
+  const theme = useTheme();
+  const bills = useStore(state => state.bills);
+  const expenses = useStore(state => state.expenses);
+  const activities = useStore(state => state.activities);
+  const currency = useStore(state => state.currency);
+  const currentUser = useStore(state => state.currentUser);
+  const markBillHandled = useStore(state => state.markBillHandled);
 
-  const [activeSegment, setActiveSegment] = React.useState<Segment>('overview');
-  const [billFilter, setBillFilter]       = React.useState<BillFilter>('all');
+  const [activeSegment, setActiveSegment] = useState<Segment>('overview');
+  const [billFilter, setBillFilter] = useState<BillFilter>('all');
 
-  const pendingBills  = useMemo(() => bills.filter(b => b.status === 'pending'),  [bills]);
-  const overdueBills  = useMemo(() => bills.filter(b => b.status === 'overdue'),  [bills]);
-  const alertCount    = pendingBills.length + overdueBills.length;
-  const totalSpend    = useMemo(() => expenses.reduce((s, e) => s + e.amount, 0), [expenses]);
+  const { data: dashboard } = useGlobalBalances();
+
+  const pendingBills = useMemo(() => bills.filter(b => b.status === 'pending'), [bills]);
+  const overdueBills = useMemo(() => bills.filter(b => b.status === 'overdue'), [bills]);
+  const alertCount = pendingBills.length + overdueBills.length;
+  const totalSpend = useMemo(() => expenses.reduce((s, e) => s + e.amount, 0), [expenses]);
 
   const now = new Date();
   const thisMonthTotal = useMemo(
-    () => expenses
-      .filter(e => {
-        const d = new Date(e.date);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      })
-      .reduce((s, e) => s + e.amount, 0),
+    () =>
+      expenses
+        .filter(e => {
+          const d = new Date(e.date);
+          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        })
+        .reduce((s, e) => s + e.amount, 0),
     [expenses], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
@@ -57,31 +72,34 @@ export default function HomeScreen({ navigation }: any) {
         <View style={styles.headerRight}>
           <IconButton
             icon={alertCount > 0 ? 'bell-badge' : 'bell-outline'}
-            iconColor={alertCount > 0 ? '#FFAA00' : theme.primary}
+            iconColor={alertCount > 0 ? theme.colors.tertiary : theme.colors.primary}
             size={24}
             onPress={() => setActiveSegment('reminders')}
             accessibilityLabel={`${alertCount} pending reminders`}
           />
           <IconButton
             icon="magnify"
-            iconColor={theme.primary}
+            iconColor={theme.colors.primary}
             size={24}
             onPress={() => navigation.navigate('Search')}
           />
         </View>
       ),
     });
-  }, [navigation, theme.primary, alertCount]);
+  }, [navigation, theme.colors.primary, theme.colors.tertiary, alertCount]);
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.background }]}>
+    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
       {/* Segmented control — sticky above scrollable content */}
-      <View style={[styles.segmentWrap, { borderBottomColor: theme.border }]}>
+      <View style={[styles.segmentWrap, { borderBottomColor: theme.colors.outline }]}>
         <SegmentedButtons
           value={activeSegment}
-          onValueChange={v => setActiveSegment(v as Segment)}
+          onValueChange={v => {
+            haptics.light();
+            setActiveSegment(v as Segment);
+          }}
           buttons={[
-            { value: 'overview',  label: 'Overview' },
+            { value: 'overview', label: 'Overview' },
             {
               value: 'bills',
               label: 'Bills',
@@ -98,61 +116,80 @@ export default function HomeScreen({ navigation }: any) {
 
       {/* ── OVERVIEW ── */}
       {activeSegment === 'overview' && (
-        <ScrollView
-          style={styles.scrollRoot}
-          contentContainerStyle={styles.container}
-        >
-          <Text variant="titleMedium" style={[styles.greeting, { color: theme.text }]}>
-            Good day{currentUser ? `, ${currentUser.name?.split(' ')[0] ?? 'User'}` : ''} 👋
-          </Text>
+        <ScrollView style={styles.scrollRoot} contentContainerStyle={styles.container}>
+          <LinearGradient
+            colors={[theme.colors.primary + '18', theme.colors.primary + '08', 'transparent']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroGradient}
+          >
+            <Text variant="titleMedium" style={[styles.greeting, { color: theme.colors.onSurface, fontFamily: 'Manrope', fontWeight: '700' }]}>
+              Good day{currentUser ? `, ${currentUser.name?.split(' ')[0] ?? 'User'}` : ''} 👋
+            </Text>
 
-          <View style={styles.tilesRow}>
-            <SummaryCard
-              icon="cash-multiple"
-              label="Total Spend"
-              value={formatAmount(totalSpend, currency)}
-              accent={theme.primary}
-              bg={theme.surface}
-              border={theme.border}
-            />
-            <SummaryCard
+            <View style={styles.tilesRow}>
+            {dashboard?.summary ? (
+              <DashboardSummary
+                summary={dashboard.summary}
+                onPress={() => navigation.navigate('GroupDetail', {
+                  groupId: 'global',
+                  groupName: 'All Groups',
+                })}
+              />
+            ) : (
+              <SummaryTile
+                icon="cash-multiple"
+                label="Total Spend"
+                value={formatAmount(totalSpend, currency)}
+                type="positive"
+              />
+            )}
+            <SummaryTile
               icon="clock-outline"
               label="Pending Bills"
               value={`${pendingBills.length}`}
-              accent="#FFAA00"
-              bg={theme.surface}
-              border={theme.border}
+              type="neutral"
             />
           </View>
+          </LinearGradient>
 
           {overdueBills.length > 0 && (
             <Surface
-              style={[styles.alertBanner, { backgroundColor: '#FFF3F3', borderColor: '#FF3B30' }]}
+              style={[
+                styles.alertBanner,
+                { backgroundColor: theme.colors.errorContainer, borderColor: theme.colors.error },
+              ]}
               elevation={0}
             >
-              <Icon source="alert-circle" size={18} color="#FF3B30" />
-              <Text style={styles.alertText}>
-                {overdueBills.length} bill{overdueBills.length > 1 ? 's' : ''} overdue — tap Reminders above
+              <Icon source="alert-circle" size={18} color={theme.colors.error} />
+              <Text variant="labelLarge" style={{ color: theme.colors.error, flex: 1 }}>
+                {overdueBills.length} bill{overdueBills.length > 1 ? 's' : ''} overdue — tap Reminders
+                above
               </Text>
             </Surface>
           )}
 
           {/* Analytics shortcut card */}
-          <Text variant="titleSmall" style={[styles.sectionTitle, { color: theme.text }]}>
+          <Text variant="titleSmall" style={[styles.sectionTitle, { color: theme.colors.onSurface, fontFamily: 'Manrope', fontWeight: '700' }]}>
             Analytics
           </Text>
           <Surface
-            style={[styles.analyticsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
-            elevation={0}
+            style={[
+              styles.analyticsCard,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.outline },
+            ]}
+            elevation={1}
           >
             <View style={styles.analyticsRow}>
               <View>
-                <Text variant="bodySmall" style={{ color: theme.textSecondary }}>This month</Text>
-                <Text variant="titleMedium" style={{ color: theme.primary, fontWeight: 'bold' }}>
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                  This month
+                </Text>
+                <Text variant="titleMedium" style={{ color: theme.colors.primary }}>
                   {formatAmount(thisMonthTotal, currency)}
                 </Text>
               </View>
-              <Icon source="chart-bar" size={36} color={theme.primary + '50'} />
+              <Icon source="chart-bar" size={36} color={theme.colors.primary + '50'} />
             </View>
             <Button
               mode="text"
@@ -165,7 +202,7 @@ export default function HomeScreen({ navigation }: any) {
             </Button>
           </Surface>
 
-          <Text variant="titleSmall" style={[styles.sectionTitle, { color: theme.text }]}>
+          <Text variant="titleSmall" style={[styles.sectionTitle, { color: theme.colors.onSurface, fontFamily: 'Manrope', fontWeight: '700' }]}>
             Recent Activity
           </Text>
 
@@ -175,25 +212,33 @@ export default function HomeScreen({ navigation }: any) {
             </Text>
           ) : (
             activities.slice(0, 5).map(entry => (
-              <View key={entry.id} style={[styles.activityRow, { borderBottomColor: theme.border }]}>
-                <View style={[styles.activityIconBox, { backgroundColor: getActivityColor(entry.action) + '18' }]}>
-                  <Icon source={getActivityIcon(entry.action)} size={18} color={getActivityColor(entry.action)} />
-                </View>
-                <View style={styles.activityText}>
-                  <Text variant="bodyMedium" style={{ color: theme.text, fontWeight: '500' }}>{entry.action}</Text>
-                  <Text variant="bodySmall" style={{ color: theme.textSecondary }}>{entry.detail}</Text>
-                </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  {entry.amount !== undefined && (
-                    <Text variant="bodyMedium" style={{ color: theme.text, fontWeight: '600' }}>
-                      {formatAmount(entry.amount, entry.currency || currency)}
+              <List.Item
+                key={entry.id}
+                title={entry.action}
+                description={entry.detail}
+                left={props => (
+                  <List.Icon
+                    {...props}
+                    icon={getActivityIcon(entry.action)}
+                    color={getActivityColor(entry.action, theme)}
+                  />
+                )}
+                right={() => (
+                  <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
+                    {entry.amount !== undefined && (
+                      <Text variant="titleSmall" style={{ color: theme.colors.onSurface }}>
+                        {formatAmount(entry.amount, entry.currency || currency)}
+                      </Text>
+                    )}
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                      {relativeTime(entry.timestamp)}
                     </Text>
-                  )}
-                  <Text variant="bodySmall" style={{ color: theme.textSecondary }}>
-                    {relativeTime(entry.timestamp)}
-                  </Text>
-                </View>
-              </View>
+                  </View>
+                )}
+                style={{ backgroundColor: theme.colors.background }}
+                titleStyle={{ color: theme.colors.onSurface }}
+                descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
+              />
             ))
           )}
         </ScrollView>
@@ -212,10 +257,15 @@ export default function HomeScreen({ navigation }: any) {
               <Chip
                 key={f}
                 selected={billFilter === f}
-                onPress={() => setBillFilter(f)}
-                style={[styles.filterChip, billFilter === f && { backgroundColor: theme.primary + '20' }]}
-                selectedColor={theme.primary}
-                textStyle={{ fontSize: 13 }}
+                onPress={() => {
+                  haptics.light();
+                  setBillFilter(f);
+                }}
+                style={[
+                  styles.filterChip,
+                  billFilter === f && { backgroundColor: theme.colors.primaryContainer },
+                ]}
+                selectedColor={theme.colors.primary}
               >
                 {f.charAt(0).toUpperCase() + f.slice(1)}
               </Chip>
@@ -225,49 +275,37 @@ export default function HomeScreen({ navigation }: any) {
             data={filteredBills}
             keyExtractor={item => item.id}
             ItemSeparatorComponent={() => <Divider />}
+            contentContainerStyle={{ flexGrow: 1 }}
             ListEmptyComponent={
-              <View style={styles.emptyCenter}>
-                <Icon source="receipt-outline" size={48} color={theme.border} />
-                <Text variant="bodyLarge" style={[styles.emptyText, { color: theme.textSecondary }]}>
-                  {billFilter === 'all'
+              <EmptyState
+                icon="receipt-outline"
+                title={
+                  billFilter === 'all'
                     ? 'No bills yet.\nUse + to add your first bill.'
-                    : `No ${billFilter} bills.`}
-                </Text>
-                <Text style={[styles.emptyHint, { color: theme.textSecondary }]}>
-                  Bills have moved here from the old Bills tab — add one with the + button.
-                </Text>
-              </View>
+                    : `No ${billFilter} bills.`
+                }
+                subtitle="Bills have moved here from the old Bills tab — add one with the + button."
+              />
             }
-            renderItem={({ item }: { item: Bill }) => {
-              const cfg = BILL_STATUS_CONFIG[item.status];
-              return (
-                <List.Item
-                  title={item.title}
-                  description={`Due: ${new Date(item.dueDate).toLocaleDateString()} · ${item.category}${item.isRecurring ? ' · Recurring' : ''}`}
-                  left={props => <List.Icon {...props} icon="receipt-outline" color={theme.primary} />}
-                  right={() => (
-                    <View style={styles.billRight}>
-                      <Text variant="titleSmall" style={{ color: theme.text, fontWeight: '600' }}>
-                        {formatAmount(item.amount, currency)}
-                      </Text>
-                      <Chip
-                        compact
-                        mode="outlined"
-                        icon={cfg.icon}
-                        textStyle={{ color: cfg.color, fontSize: 10 }}
-                        style={{ borderColor: cfg.color }}
-                      >
-                        {item.status}
-                      </Chip>
-                    </View>
-                  )}
-                  onPress={() => navigation.navigate('BillDetail', { billId: item.id })}
-                  style={{ backgroundColor: theme.background }}
-                  titleStyle={{ color: theme.text }}
-                  descriptionStyle={{ color: theme.textSecondary }}
-                />
-              );
-            }}
+            renderItem={({ item }: { item: Bill }) => (
+              <List.Item
+                title={item.title}
+                description={`Due: ${new Date(item.dueDate).toLocaleDateString()} · ${item.category}${item.isRecurring ? ' · Recurring' : ''}`}
+                left={props => <List.Icon {...props} icon="receipt-outline" color={theme.colors.primary} />}
+                right={() => (
+                  <View style={styles.billRight}>
+                    <Text variant="titleSmall" style={{ color: theme.colors.onSurface }}>
+                      {formatAmount(item.amount, currency)}
+                    </Text>
+                    <StatusChip type={item.status} />
+                  </View>
+                )}
+                onPress={() => navigation.navigate('BillDetail', { billId: item.id })}
+                style={{ backgroundColor: theme.colors.background }}
+                titleStyle={{ color: theme.colors.onSurface }}
+                descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
+              />
+            )}
           />
         </View>
       )}
@@ -278,20 +316,16 @@ export default function HomeScreen({ navigation }: any) {
           data={[...overdueBills, ...pendingBills]}
           keyExtractor={item => item.id}
           ItemSeparatorComponent={() => <Divider />}
+          contentContainerStyle={{ flexGrow: 1 }}
           ListEmptyComponent={
-            <View style={styles.emptyCenter}>
-              <Icon source="bell-check-outline" size={48} color="#ccc" />
-              <Text variant="bodyLarge" style={styles.emptyText}>
-                All clear! No pending reminders.
-              </Text>
-              <Text style={styles.emptyHint}>
-                Reminders have moved here from the old Reminders tab. Due-date alerts appear as badges on the bell icon above.
-              </Text>
-            </View>
+            <EmptyState
+              icon="bell-check-outline"
+              title="All clear! No pending reminders."
+              subtitle="Reminders have moved here from the old Reminders tab. Due-date alerts appear as badges on the bell icon above."
+            />
           }
           renderItem={({ item }: { item: Bill }) => {
             const overdue = item.status === 'overdue';
-            const chipColor = overdue ? '#FF3B30' : '#FFAA00';
             return (
               <List.Item
                 title={item.title}
@@ -300,35 +334,30 @@ export default function HomeScreen({ navigation }: any) {
                   <List.Icon
                     {...props}
                     icon={overdue ? 'bell-alert' : 'bell-outline'}
-                    color={chipColor}
+                    color={overdue ? theme.colors.error : theme.colors.tertiary}
                   />
                 )}
                 right={() => (
                   <View style={styles.reminderRight}>
-                    <Chip
-                      compact
-                      mode="outlined"
-                      icon={overdue ? 'alert-circle-outline' : 'clock-outline'}
-                      textStyle={{ color: chipColor, fontSize: 10 }}
-                      style={{ borderColor: chipColor }}
-                    >
-                      {overdue ? 'overdue' : 'pending'}
-                    </Chip>
+                    <StatusChip type={overdue ? 'overdue' : 'pending'} />
                     <Button
                       mode="text"
                       compact
                       icon="check"
-                      textColor={theme.primary}
-                      onPress={() => markBillHandled(item.id)}
+                      textColor={theme.colors.primary}
+                      onPress={() => {
+                        haptics.success();
+                        markBillHandled(item.id);
+                      }}
                     >
                       Done
                     </Button>
                   </View>
                 )}
                 onPress={() => navigation.navigate('BillDetail', { billId: item.id })}
-                style={{ backgroundColor: theme.background }}
-                titleStyle={{ color: theme.text }}
-                descriptionStyle={{ color: theme.textSecondary }}
+                style={{ backgroundColor: theme.colors.background }}
+                titleStyle={{ color: theme.colors.onSurface }}
+                descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
               />
             );
           }}
@@ -338,34 +367,20 @@ export default function HomeScreen({ navigation }: any) {
   );
 }
 
-function SummaryCard({
-  icon, label, value, accent, bg, border,
-}: {
-  icon: string; label: string; value: string; accent: string; bg: string; border: string;
-}) {
-  return (
-    <Surface style={[styles.tile, { backgroundColor: bg, borderColor: border }]} elevation={0}>
-      <Icon source={icon} size={24} color={accent} />
-      <Text variant="bodySmall" style={styles.tileLabel}>{label}</Text>
-      <Text variant="titleLarge" style={[styles.tileValue, { color: accent }]}>{value}</Text>
-    </Surface>
-  );
-}
-
 const getActivityIcon = (action: string) => {
-  if (action.includes('Expense'))              return 'cash-multiple';
+  if (action.includes('Expense')) return 'cash-multiple';
   if (action.includes('Bill') && action.includes('Add')) return 'receipt-text-plus';
   if (action.includes('Bill') && action.includes('Handle')) return 'check-circle-outline';
-  if (action.includes('Member'))               return 'account-plus';
-  if (action.includes('Group'))                return 'account-group';
+  if (action.includes('Member')) return 'account-plus';
+  if (action.includes('Group')) return 'account-group';
   return 'clock-outline';
 };
 
-const getActivityColor = (action: string) => {
-  if (action.includes('Expense'))        return '#0F7A5B';
-  if (action.includes('Bill'))           return '#FFAA00';
-  if (action.includes('Group') || action.includes('Member')) return '#5C6BC0';
-  return '#999';
+const getActivityColor = (action: string, theme: any) => {
+  if (action.includes('Expense')) return theme.colors.primary;
+  if (action.includes('Bill')) return theme.colors.tertiary;
+  if (action.includes('Group') || action.includes('Member')) return theme.colors.tertiary;
+  return theme.colors.onSurfaceVariant;
 };
 
 const relativeTime = (timestamp: string) => {
@@ -382,44 +397,47 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scrollRoot: { flex: 1 },
   container: { padding: 16, paddingBottom: 32 },
+  heroGradient: {
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
+    borderRadius: 16,
+  },
   headerRight: { flexDirection: 'row', alignItems: 'center' },
   segmentWrap: {
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  segmentButtons: { },
-  greeting: { marginBottom: 16, fontWeight: '600' },
-  tilesRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  tile: { flex: 1, padding: 16, borderRadius: 12, borderWidth: 1, gap: 6 },
-  tileLabel: { color: '#888888', textTransform: 'uppercase', letterSpacing: 0.5 },
-  tileValue: { fontWeight: 'bold' },
+  segmentButtons: {},
+  greeting: { marginBottom: 16 },
+  tilesRow: { flexDirection: 'row', gap: 4, marginBottom: 16 },
   alertBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    padding: 12, borderRadius: 10, borderWidth: 1, marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 16,
   },
-  alertText: { color: '#FF3B30', fontWeight: '600', flex: 1 },
-  sectionTitle: { marginTop: 8, marginBottom: 8, fontWeight: '600' },
+  sectionTitle: { marginTop: 8, marginBottom: 8 },
   analyticsCard: {
-    borderRadius: 12, borderWidth: 1, padding: 16, marginBottom: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 20,
   },
   analyticsRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  activityRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  activityIconBox: {
-    width: 36, height: 36, borderRadius: 10,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  activityText: { flex: 1 },
   chipRow: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
   filterChip: { marginRight: 8, height: 36, justifyContent: 'center' },
   billRight: { justifyContent: 'center', alignItems: 'flex-end', gap: 4, marginRight: 4 },
   reminderRight: { justifyContent: 'center', alignItems: 'flex-end', gap: 4, marginRight: 4 },
-  emptyCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 48, gap: 12 },
   emptyText: { textAlign: 'center' },
-  emptyHint: { textAlign: 'center', fontSize: 12, lineHeight: 18 },
 });

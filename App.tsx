@@ -1,8 +1,11 @@
+/** @format */
+
 import React, { useEffect, useState } from 'react';
-import { StatusBar, useColorScheme, View, ActivityIndicator } from 'react-native';
+import { StatusBar, useColorScheme, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { navigationRef } from './src/navigation/navigationRef';
-import { Provider as PaperProvider, Text } from 'react-native-paper';
+import { Provider as PaperProvider, Surface, Text as PaperText, ActivityIndicator } from 'react-native-paper';
 import { ThemeProvider, useAppTheme } from './src/context/ThemeContext';
 import { paperLightTheme, paperDarkTheme } from './src/constants/paperTheme';
 import RootNavigator from './src/navigation/RootNavigator';
@@ -11,6 +14,19 @@ import { useStore } from './src/store/useStore';
 import { authService } from './src/services/authService';
 import { registerDeviceToken, setupForegroundHandler } from './src/services/notificationService';
 import { fetchExchangeRates } from './src/services/currencyService';
+import ErrorBoundary from './src/components/ErrorBoundary';
+
+// Force Manrope on all plain React Native Text components as a fallback
+(Text as any).defaultProps = { ...(Text as any).defaultProps, style: { fontFamily: 'Manrope' } };
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      retry: 2,
+    },
+  },
+});
 
 function AppContent() {
   const { isDark, theme } = useAppTheme();
@@ -69,19 +85,42 @@ function AppContent() {
 
   if (!hasHydrated || authChecking) {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }}>
-        <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: theme.primary, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
-          <Text style={{ color: '#FFF', fontSize: 28, fontWeight: '800' }}>F</Text>
-        </View>
-        <ActivityIndicator color={theme.primary} />
-      </View>
+      <Surface
+        style={{
+          flex: 1,
+          backgroundColor: theme.background,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+        elevation={0}>
+        <Surface
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: 32,
+            backgroundColor: theme.primary,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginBottom: 16,
+          }}
+          elevation={1}>
+          <PaperText variant="displaySmall" style={{ color: '#FFF', fontFamily: 'Manrope', fontWeight: '800' }}>
+            F
+          </PaperText>
+        </Surface>
+        <ActivityIndicator animating color={theme.primary} />
+      </Surface>
     );
   }
 
   return (
     <PaperProvider theme={isDark ? paperDarkTheme : paperLightTheme}>
       <NavigationContainer ref={navigationRef} linking={linking}>
-        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+        <StatusBar
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor={theme.background}
+          translucent
+        />
         <RootNavigator />
       </NavigationContainer>
     </PaperProvider>
@@ -91,10 +130,14 @@ function AppContent() {
 export default function App() {
   const isDarkMode = useColorScheme() === 'dark';
   return (
-    <SafeAreaProvider>
-      <ThemeProvider initialDark={isDarkMode}>
-        <AppContent />
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <QueryClientProvider client={queryClient}>
+      <SafeAreaProvider>
+        <ThemeProvider initialDark={isDarkMode}>
+          <ErrorBoundary>
+            <AppContent />
+          </ErrorBoundary>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </QueryClientProvider>
   );
 }

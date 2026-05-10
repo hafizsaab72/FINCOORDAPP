@@ -16,9 +16,10 @@ import { apiFetch } from '../services/api';
 import { expensesService, groupsService } from '../services/groupsService';
 import { DatePickerModal } from 'react-native-paper-dates';
 import { friendsService, FriendUser } from '../services/friendsService';
-import { getSymbol } from '../utils/currency';
-import { SplitMethod } from '../types';
+import { getSymbol, toMinorUnits } from '../utils/currency';
+import { SplitMethod, Payment, SplitEntry, SplitType } from '../types';
 import { launchImageLibrary } from 'react-native-image-picker';
+import MultiPayerSelector from '../components/MultiPayerSelector';
 
 // ── Types ──────────────────────────────────────────────────────
 type InternalView = 'main' | 'participants' | 'split_quick' | 'split_advanced';
@@ -27,6 +28,34 @@ type AdvSplitType = 'equal' | 'exact' | 'percentage';
 interface Participant { id: string; name: string }
 
 // ── Helpers ────────────────────────────────────────────────────
+const getInitials = (name: string) =>
+  name.split(' ').map(n => n[0] ?? '').join('').slice(0, 2).toUpperCase();
+
+const avatarColor = (id: string) => {
+  const palette = ['#E8673A', '#0F7A5B', '#5B5EA6', '#9B2335', '#3D7A60', '#BF4F74'];
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = id.codePointAt(i)! + ((h << 5) - h);
+  return palette[Math.abs(h) % palette.length];
+};
+
+const fmtAmt = (sym: string, v: number) =>
+  `${sym}${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function mapSplitTypeToBackend(type: SplitOptionType): SplitType {
+  switch (type) {
+    case 'exact': return 'unequal';
+    case 'adjustment': return 'itemized';
+    default: return type;
+  }
+}
+
+function mapBackendToSplitType(type: string): SplitOptionType {
+  switch (type) {
+    case 'unequal': return 'exact';
+    case 'itemized': return 'adjustment';
+    default: return (type as SplitOptionType) ?? 'equal';
+  }
+}
 const getInitials = (name: string) =>
   name.split(' ').map(n => n[0] ?? '').join('').slice(0, 2).toUpperCase();
 
@@ -97,6 +126,7 @@ export default function AddExpenseModal({ navigation, route }: any) {
 
   // ── Payer + split ──────────────────────────────────────────
   const [payerId, setPayerId] = useState(myId);
+  const [payments, setPayments] = useState<Payment[]>([{ userId: myId, amount: 0, currency }]);
   const [quickSplit, setQuickSplit] = useState<QuickSplit>('you_paid_equal');
   const [advSplitType, setAdvSplitType] = useState<AdvSplitType>('equal');
 
@@ -231,7 +261,54 @@ export default function AddExpenseModal({ navigation, route }: any) {
       case 'they_paid_full':
         return { resolvedPayerId: otherPerson?.id ?? myId, splitMethod: 'custom', splitDetails: { [myId]: numericAmount } };
     }
+  }
+  // ── Build multi-payer payload ──────────────────────────────
+  const buildPayload = (): {
+    payments: Payment[];
+    splits: SplitEntry[];
+    splitType: SplitType;
+  } => {
+    const included = allParticipants.filter(p => includedMembers.has(p.id));
+    const ids = included.length > 0 ? included.map(p => p.id) : allParticipants.map(p => p.id);
+
+    const paymentsOut: Payment[] = payments
+      .filter(p => p.amount > 0)
+      .map(p => ({ userId: p.userId, amount: p.amount, currency }));
+
+    const splits: SplitEntry[] = [];
+
+    switch (advSplitType) {
+      case 'equal': {
+        const share = numericAmount / ids.length;
+        for (const id of ids) {
+          splits.push({ userId: id, owedAmount: share, shareType: 'equal', shareValue: 1 });
+        }
+        break;
+      }
+      case 'exact': {
+        for (const id of ids) {
+          const val = parseFloat(exactMap[id] ?? '0') || 0;
+          splits.push({ userId: id, owedAmount: val, shareType: 'exact', shareValue: val });
+        }
+        break;
+      }
+      case 'percentage': {
+        for (const id of ids) {
+          const pct = parseFloat(percentageMap[id] ?? '0') || 0;
+          const owed = (numericAmount * pct) / 100;
+          splits.push({ userId: id, owedAmount: owed, shareType: 'percentage', shareValue: pct });
+        }
+        break;
+      }
+    }
+
+    return {
+      payments: paymentsOut,
+      splits,
+      splitType: mapSplitTypeToBackend(advSplitType),
+    };
   };
+;
 
   // ── Scan receipt (OCR) ─────────────────────────────────────
   const handleScanReceipt = async () => {
@@ -289,12 +366,23 @@ export default function AddExpenseModal({ navigation, route }: any) {
     const effectiveGroupId = selectedGroupId ?? 'direct';
 
     if (isEditing) {
-      const patch = { amount: numericAmount, notes: description.trim(), currency, splitMethod, splitDetails };
-      updateExpense(editExpense.id, patch);
+      const payload = buildPayload();
+      const patch = {
+        totalAmount: toMinorUnits(numericAmount),
+        notes: description.trim(),
+        description: description.trim(),
+        baseCurrency: currency,
+        splitType: payload.splitType,
+        payments: payload.payments.map(p => ({ ...p, amount: toMinorUnits(p.amount) })),
+        splits: payload.splits.map(s => ({ ...s, owedAmount: toMinorUnits(s.owedAmount) })),
+        date: isoDate,
+      };
+      updateExpense(editExpense.id, { amount: numericAmount, notes: description.trim(), currency, splitMethod, splitDetails });
       if (token && editExpense.id.match(/^[a-f\d]{24}$/i)) {
         try { await expensesService.update(editExpense.id, patch); } catch { /* ignore */ }
       }
     } else {
+      const payload = buildPayload();
       addExpense({
         id: `exp-${Date.now()}`,
         groupId: effectiveGroupId,
@@ -310,10 +398,15 @@ export default function AddExpenseModal({ navigation, route }: any) {
       if (token && selectedGroupId?.match(/^[a-f\d]{24}$/i)) {
         try {
           await apiFetch('/expenses', 'POST', {
-            groupId: selectedGroupId, payerId: resolvedPayerId,
-            amount: numericAmount, notes: description.trim(),
-            date: isoDate, splitMethod, splitDetails, currency,
-            participantNames: Object.fromEntries(allParticipants.map(p => [p.id, p.name])),
+            groupId: selectedGroupId,
+            description: description.trim(),
+            totalAmount: toMinorUnits(numericAmount),
+            baseCurrency: currency,
+            payments: payload.payments.map(p => ({ ...p, amount: toMinorUnits(p.amount) })),
+            splits: payload.splits.map(s => ({ ...s, owedAmount: toMinorUnits(s.owedAmount) })),
+            splitType: payload.splitType,
+            notes: description.trim(),
+            date: isoDate,
           });
         } catch {
           Alert.alert('Sync Warning', 'Saved locally but could not sync to server.');
@@ -912,6 +1005,16 @@ export default function AddExpenseModal({ navigation, route }: any) {
         >
           {splitPillText()}
         </Chip>
+
+        {/* Multi-payer selector */}
+        <View style={{ marginTop: 16 }}>
+          <MultiPayerSelector
+            members={allParticipants.map(p => ({ _id: p.id, name: p.name }))}
+            payments={payments}
+            currency={currency}
+            onChange={setPayments}
+          />
+        </View>
       </View>
 
       {/* ── Bottom toolbar ── */}

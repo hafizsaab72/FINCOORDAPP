@@ -25,6 +25,12 @@ export async function apiFetch<T = any>(
   }
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+  if (!res.ok) {
+    // Intercept 401 and sign out
+    if (res.status === 401) {
+      useStore.getState().signOut();
+    }
+    throw new Error(data.error || 'Request failed');
+  }
   return data;
 }

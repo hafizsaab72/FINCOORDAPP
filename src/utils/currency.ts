@@ -26,6 +26,24 @@ const NO_DECIMAL = new Set(['JPY']);
 export const getSymbol = (code: string): string =>
   CURRENCIES.find(c => c.code === code)?.symbol ?? code;
 
+/**
+ * Convert a display amount (major units) to minor units (paise/cents)
+ * e.g. "8000" or 8000 → 800000
+ */
+export function toMinorUnits(amount: string | number): number {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(num)) return 0;
+  return Math.round(num * 100);
+}
+
+/**
+ * Convert minor units to display amount (major units)
+ * e.g. 800000 → 8000.00
+ */
+export function fromMinorUnits(minorUnits: number): number {
+  return minorUnits / 100;
+}
+
 export const formatAmount = (amount: number, code: string): string => {
   const symbol = getSymbol(code);
   const value = NO_DECIMAL.has(code)
@@ -33,6 +51,15 @@ export const formatAmount = (amount: number, code: string): string => {
     : amount.toFixed(2);
   return `${symbol}${value}`;
 };
+
+/**
+ * Format minor units directly to display string.
+ * e.g. 800000, 'INR' → "₹8,000.00"
+ */
+export function formatMinorUnits(minorUnits: number, code: string): string {
+  const major = fromMinorUnits(minorUnits);
+  return formatAmount(major, code);
+}
 
 export const CURRENCY_ICONS: Record<string, string> = {
   USD: 'currency-usd',
