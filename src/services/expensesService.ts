@@ -43,6 +43,38 @@ export interface ApiExpenseItem {
   currency?: string; // legacy
 }
 
+import { toMinorUnits } from '../utils/currency';
+
+function convertToMinorUnits(payload: CreateExpensePayload): CreateExpensePayload {
+  return {
+    ...payload,
+    totalAmount: toMinorUnits(payload.totalAmount),
+    payments: payload.payments.map(p => ({
+      ...p,
+      amount: toMinorUnits(p.amount),
+    })),
+    splits: payload.splits.map(s => ({
+      ...s,
+      owedAmount: toMinorUnits(s.owedAmount),
+    })),
+  };
+}
+
+function convertPatchToMinorUnits(patch: UpdateExpensePayload): UpdateExpensePayload {
+  return {
+    ...patch,
+    totalAmount: patch.totalAmount !== undefined ? toMinorUnits(patch.totalAmount) : undefined,
+    payments: patch.payments?.map(p => ({
+      ...p,
+      amount: toMinorUnits(p.amount),
+    })),
+    splits: patch.splits?.map(s => ({
+      ...s,
+      owedAmount: toMinorUnits(s.owedAmount),
+    })),
+  };
+}
+
 export const expensesService = {
   getByGroup: (groupId: string, limit = 30, skip = 0) =>
     apiFetch<{ expenses: ApiExpenseItem[]; total: number; hasMore: boolean }>(
@@ -53,10 +85,10 @@ export const expensesService = {
     apiFetch<{ expense: ApiExpenseItem }>(`/expenses/${expenseId}`),
 
   create: (payload: CreateExpensePayload) =>
-    apiFetch<{ expense: ApiExpenseItem }>('/expenses', 'POST', payload),
+    apiFetch<{ expense: ApiExpenseItem }>('/expenses', 'POST', convertToMinorUnits(payload)),
 
   update: (expenseId: string, patch: UpdateExpensePayload) =>
-    apiFetch<{ expense: ApiExpenseItem }>(`/expenses/${expenseId}`, 'PATCH', patch),
+    apiFetch<{ expense: ApiExpenseItem }>(`/expenses/${expenseId}`, 'PATCH', convertPatchToMinorUnits(patch)),
 
   delete: (expenseId: string) =>
     apiFetch<{ message: string }>(`/expenses/${expenseId}`, 'DELETE'),

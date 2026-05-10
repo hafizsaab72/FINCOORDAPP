@@ -56,16 +56,6 @@ function mapBackendToSplitType(type: string): SplitOptionType {
     default: return (type as SplitOptionType) ?? 'equal';
   }
 }
-const getInitials = (name: string) =>
-  name.split(' ').map(n => n[0] ?? '').join('').slice(0, 2).toUpperCase();
-
-const avatarColor = (id: string) => {
-  const palette = ['#E8673A', '#0F7A5B', '#5B5EA6', '#9B2335', '#3D7A60', '#BF4F74'];
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = id.codePointAt(i)! + ((h << 5) - h);
-  return palette[Math.abs(h) % palette.length];
-};
-
 const fmtAmt = (sym: string, v: number) =>
   `${sym}${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 

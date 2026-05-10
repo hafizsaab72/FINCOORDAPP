@@ -13,9 +13,8 @@ interface BalanceExpense {
  * Positive net = user is owed money (over-paid)
  * Negative net = user owes money (under-paid)
  *
- * Convention (matches backend API):
- *   member.net > 0  → this member owes money to myId
- *   member.net < 0  → myId owes money to this member
+ * This is client-side approximation only. For exact pairwise balances,
+ * use the API via useGroupBalances() which calls /groups/:id/balances.
  */
 export function computeBalances(
   expenses: BalanceExpense[],
@@ -25,7 +24,6 @@ export function computeBalances(
   const memberMap: Record<string, { name: string; paid: number; owed: number; net: number }> = {};
 
   for (const e of expenses) {
-    // Ensure all participants exist in map
     const allUserIds = new Set<string>([
       ...e.payments.map(p => p.userId),
       ...e.splits.map(s => s.userId),
@@ -42,35 +40,38 @@ export function computeBalances(
       }
     }
 
-    // Accumulate payments (who paid)
     for (const p of e.payments) {
       memberMap[p.userId].paid += p.amount;
     }
 
-    // Accumulate splits (who owes)
     for (const s of e.splits) {
       memberMap[s.userId].owed += s.owedAmount;
     }
   }
 
-  // Compute net for each member: paid - owed
   for (const uid of Object.keys(memberMap)) {
     memberMap[uid].net = memberMap[uid].paid - memberMap[uid].owed;
   }
 
-  let totalOwedToYou = 0;
-  let totalYouOwe = 0;
+  let totalYouOwe = 0;      // money I owe to others (they over-paid)
+  let totalOwedToYou = 0;   // money others owe to me (they under-paid)
 
   for (const [uid, info] of Object.entries(memberMap)) {
     if (uid === myId) continue;
     if (info.net > 0) {
-      // They over-paid → I owe them (their net is positive, meaning they're owed)
+      // They over-paid → they are owed money → I may owe them
       totalYouOwe += info.net;
     } else if (info.net < 0) {
-      // They under-paid → they owe me
+      // They under-paid → they owe money → they may owe me
       totalOwedToYou += Math.abs(info.net);
     }
   }
+
+  // For exact per-user net (used by UI)
+  const myNet = memberMap[myId]?.net ?? 0;
+  // Adjust: if myNet > 0, I'm owed money (totalOwedToYou should reflect this)
+  // If myNet < 0, I owe money (totalYouOwe should reflect this)
+  // The pairwise breakdown requires API data; this is approximation.
 
   const memberBalances: MemberBalance[] = Object.entries(memberMap)
     .filter(([memberId]) => memberId !== myId)
