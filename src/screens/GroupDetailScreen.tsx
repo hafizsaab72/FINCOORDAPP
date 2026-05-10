@@ -68,7 +68,7 @@ export default function GroupDetailScreen({ route, navigation }: any) {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [balancesModalVisible, setBalancesModalVisible] = useState(false);
-  const [balancesModalTab, setBalancesModalTab] = useState<'balances' | 'totals'>('balances');
+  const [balancesModalTab, setBalancesModalTab] = useState<'balances' | 'simplified' | 'totals'>('balances');
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const deleteExpense = useStore(state => state.deleteExpense);
@@ -167,6 +167,10 @@ export default function GroupDetailScreen({ route, navigation }: any) {
   }, [apiExpenses, myId, memberMap]);
 
   const expenseSections = useMemo(() => groupByMonth(apiExpenses), [apiExpenses]);
+
+  const settlementExpenses = useMemo(() => {
+    return apiExpenses.filter(e => e.notes?.toLowerCase().includes('settlement') || e.splitMethod === 'custom' && Object.keys(e.splitDetails ?? {}).length === 1);
+  }, [apiExpenses]);
 
   const group = groupDetail;
   const name = group?.name ?? initialName ?? 'Group';
@@ -325,6 +329,7 @@ export default function GroupDetailScreen({ route, navigation }: any) {
     }},
     { label: 'Charts', icon: 'chart-bar', filled: false, onPress: () => { haptics.light(); navigation.navigate('Analytics'); }},
     { label: 'Balances', icon: 'scale-balance', filled: false, onPress: () => { haptics.light(); setBalancesModalTab('balances'); setBalancesModalVisible(true); }},
+    { label: 'Simplified', icon: 'lightbulb-on', filled: false, onPress: () => { haptics.light(); setBalancesModalTab('simplified'); setBalancesModalVisible(true); }},
     { label: 'Totals', icon: 'sigma', filled: false, onPress: () => { haptics.light(); setBalancesModalTab('totals'); setBalancesModalVisible(true); }},
   ];
 
@@ -444,6 +449,28 @@ export default function GroupDetailScreen({ route, navigation }: any) {
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
+
+                {/* Settlement history */}
+                {settlementExpenses.length > 0 && (
+                  <View style={{ marginTop: 12 }}>
+                    <Text style={[styles.sectionHeaderText, { color: theme.textSecondary, fontSize: 13, marginBottom: 6 }]}>
+                      Settlement history
+                    </Text>
+                    {settlementExpenses.slice(0, 3).map((e, i) => (
+                      <View key={e._id ?? i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                        <Icon source="check-circle-outline" size={14} color={theme.success} />
+                        <Text style={{ color: theme.textSecondary, fontSize: 13, marginLeft: 6 }}>
+                          {e.notes || 'Settlement'} — {getSymbol(e.currency)}{e.amount.toFixed(2)}
+                        </Text>
+                      </View>
+                    ))}
+                    {settlementExpenses.length > 3 && (
+                      <Text style={{ color: theme.primary, fontSize: 12 }}>
+                        +{settlementExpenses.length - 3} more settlements
+                      </Text>
+                    )}
+                  </View>
+                )}
               </View>
             );
           }
@@ -496,7 +523,7 @@ export default function GroupDetailScreen({ route, navigation }: any) {
           </Text>
 
           <View style={[styles.balModalTabs, { borderBottomColor: theme.border }]}>
-            {(['balances', 'totals'] as const).map(tab => (
+            {(['balances', 'simplified', 'totals'] as const).map(tab => (
               <TouchableRipple
                 key={tab}
                 style={[
@@ -524,14 +551,67 @@ export default function GroupDetailScreen({ route, navigation }: any) {
                   <Text variant="bodyMedium" style={{ color: theme.textSecondary, textAlign: 'center', paddingVertical: 24 }}>
                     Everyone is settled up!
                   </Text>
-                ) : apiBalances?.simplifiedTransactions && apiBalances.simplifiedTransactions.length > 0 && groupDetail?.simplifyDebts ? (
+                ) : (
+                  balances.memberBalances.filter(m => !m.isMe).map((m, i) => (
+                    <React.Fragment key={m.memberId}>
+                      {i > 0 && <Divider />}
+                      <List.Item
+                        title={m.name}
+                        titleStyle={{ color: theme.text }}
+                        left={() => <AppAvatar user={{ name: m.name, _id: m.memberId }} size={36} />}
+                        right={() => (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <View style={{ alignItems: 'flex-end' }}>
+                              <Text variant="bodySmall" style={{ color: m.net > 0.005 ? theme.success : m.net < -0.005 ? theme.error : theme.textSecondary }}>
+                                {m.net > 0.005 ? 'owes you' : m.net < -0.005 ? 'you owe' : 'settled'}
+                              </Text>
+                              {Math.abs(m.net) > 0.005 && (
+                                <Text variant="titleMedium" style={{ color: m.net > 0 ? theme.success : theme.error }}>
+                                  {symbol}{Math.abs(m.net).toFixed(2)}
+                                </Text>
+                              )}
+                            </View>
+                            {m.net < -0.005 && (
+                              <Button
+                                mode="contained"
+                                compact
+                                buttonColor={theme.error}
+                                onPress={() => {
+                                  haptics.success();
+                                  setBalancesModalVisible(false);
+                                  navigation.navigate('SettleUpModal', {
+                                    groupId, groupName: name,
+                                    members: balances?.memberBalances ?? [],
+                                    preselectedMemberId: m.memberId,
+                                  });
+                                }}
+                              >
+                                Settle
+                              </Button>
+                            )}
+                          </View>
+                        )}
+                      />
+                    </React.Fragment>
+                  ))
+                )}
+              </>
+            ) : balancesModalTab === 'simplified' ? (
+              <>
+                {!apiBalances?.simplifiedTransactions || apiBalances.simplifiedTransactions.length === 0 ? (
+                  <Text variant="bodyMedium" style={{ color: theme.textSecondary, textAlign: 'center', paddingVertical: 24 }}>
+                    {groupDetail?.simplifyDebts
+                      ? 'Everyone is settled up!'
+                      : 'Enable "Simplify debts" in group settings to see the optimal payment plan.'}
+                  </Text>
+                ) : (
                   <>
                     {apiBalances.simplifiedTransactions.map((tx, i) => (
                       <React.Fragment key={`${tx.from}-${tx.to}-${i}`}>
                         {i > 0 && <Divider />}
                         <List.Item
                           title={tx.fromName}
-                          description={`owes ${tx.toName}`}
+                          description={`pays ${tx.toName}`}
                           titleStyle={{ color: theme.text }}
                           descriptionStyle={{ color: theme.textSecondary }}
                           left={() => <AppAvatar user={{ name: tx.fromName }} size={36} />}
@@ -597,49 +677,6 @@ export default function GroupDetailScreen({ route, navigation }: any) {
                       </Text>
                     </View>
                   </>
-                ) : (
-                  balances.memberBalances.filter(m => !m.isMe).map((m, i) => (
-                    <React.Fragment key={m.memberId}>
-                      {i > 0 && <Divider />}
-                      <List.Item
-                        title={m.name}
-                        titleStyle={{ color: theme.text }}
-                        left={() => <AppAvatar user={{ name: m.name, _id: m.memberId }} size={36} />}
-                        right={() => (
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                            <View style={{ alignItems: 'flex-end' }}>
-                              <Text variant="bodySmall" style={{ color: m.net > 0.005 ? theme.success : m.net < -0.005 ? theme.error : theme.textSecondary }}>
-                                {m.net > 0.005 ? 'owes you' : m.net < -0.005 ? 'you owe' : 'settled'}
-                              </Text>
-                              {Math.abs(m.net) > 0.005 && (
-                                <Text variant="titleMedium" style={{ color: m.net > 0 ? theme.success : theme.error }}>
-                                  {symbol}{Math.abs(m.net).toFixed(2)}
-                                </Text>
-                              )}
-                            </View>
-                            {m.net < -0.005 && (
-                              <Button
-                                mode="contained"
-                                compact
-                                buttonColor={theme.error}
-                                onPress={() => {
-                                  haptics.success();
-                                  setBalancesModalVisible(false);
-                                  navigation.navigate('SettleUpModal', {
-                                    groupId, groupName: name,
-                                    members: balances?.memberBalances ?? [],
-                                    preselectedMemberId: m.memberId,
-                                  });
-                                }}
-                              >
-                                Settle
-                              </Button>
-                            )}
-                          </View>
-                        )}
-                      />
-                    </React.Fragment>
-                  ))
                 )}
               </>
             ) : (

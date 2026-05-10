@@ -90,35 +90,49 @@ export default function SettleUpModal({ navigation, route }: any) {
     const payerId = member.net > 0 ? member.memberId : myId;
     const receiverId = member.net > 0 ? myId : member.memberId;
 
-    setSaving(true);
-    try {
-      addExpense({
-        id: `settle-${Date.now()}`,
-        groupId,
-        amount: numAmount,
-        currency,
-        payerId,
-        splitMethod: 'custom',
-        splitDetails: { [receiverId]: numAmount },
-        date: new Date().toISOString(),
-        notes: note.trim() || 'Settlement',
-        participantNames: Object.fromEntries(
-          allMembers.map((m: MemberBalance) => [m.memberId, m.name]),
-        ),
-      });
+    // Confirmation modal
+    Alert.alert(
+      'Confirm settlement',
+      `${member.net > 0 ? `${member.name} pays you` : 'You pay'} ${currency} ${numAmount.toFixed(2)}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: async () => {
+            setSaving(true);
+            try {
+              addExpense({
+                id: `settle-${Date.now()}`,
+                groupId,
+                amount: numAmount,
+                currency,
+                payerId,
+                splitMethod: 'custom',
+                splitDetails: { [receiverId]: numAmount },
+                date: new Date().toISOString(),
+                notes: note.trim() || 'Settlement',
+                participantNames: Object.fromEntries(
+                  allMembers.map((m: MemberBalance) => [m.memberId, m.name]),
+                ),
+              });
 
-      if (groupId?.match(/^[a-f\d]{24}$/i)) {
-        await groupsService.settle(groupId, { payerId, receiverId, amount: numAmount, currency });
-      }
+              if (groupId?.match(/^[a-f\d]{24}$/i)) {
+                await groupsService.settle(groupId, { payerId, receiverId, amount: numAmount, currency });
+              }
 
-      haptics.success();
-      navigation.goBack();
-    } catch {
-      Alert.alert('Sync Warning', 'Saved locally but could not sync to server.');
-      navigation.goBack();
-    } finally {
-      setSaving(false);
-    }
+              haptics.success();
+              Alert.alert('Settlement recorded', 'The payment has been recorded successfully.');
+              navigation.goBack();
+            } catch {
+              Alert.alert('Sync Warning', 'Saved locally but could not sync to server.');
+              navigation.goBack();
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   if (step === 'select') {

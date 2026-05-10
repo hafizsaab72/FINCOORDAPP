@@ -795,6 +795,37 @@ export default function AddExpenseModal({ navigation, route }: any) {
             : 'Enter exact amount owed by each person.'}
         </Text>
 
+        {/* Remaining indicator */}
+        {advSplitType === 'exact' && numericAmount > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={{ color: Math.abs(exactRemaining) < 0.01 ? theme.success : '#E8673A', fontSize: 14, fontWeight: '600' }}>
+              {Math.abs(exactRemaining) < 0.01
+                ? `✓ Split is exact — ${fmtAmt(sym, numericAmount)} total`
+                : exactRemaining > 0
+                ? `${fmtAmt(sym, exactRemaining)} remaining`
+                : `${fmtAmt(sym, Math.abs(exactRemaining))} over budget`}
+            </Text>
+          </View>
+        )}
+        {advSplitType === 'percentage' && numericAmount > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={{ color: Math.abs(percentTotal - 100) < 0.5 ? theme.success : '#E8673A', fontSize: 14, fontWeight: '600' }}>
+              {Math.abs(percentTotal - 100) < 0.5
+                ? `✓ ${percentTotal.toFixed(1)}% — split is exact`
+                : percentTotal < 100
+                ? `${(100 - percentTotal).toFixed(1)}% remaining`
+                : `${(percentTotal - 100).toFixed(1)}% over 100%`}
+            </Text>
+          </View>
+        )}
+        {advSplitType === 'equal' && numericAmount > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={{ color: theme.success, fontSize: 14, fontWeight: '600' }}>
+              ✓ {fmtAmt(sym, equalShare)} per person ({includedCount} people)
+            </Text>
+          </View>
+        )}
+
         {allParticipants.map(p => {
           const isIncluded = includedMembers.has(p.id);
           return (
