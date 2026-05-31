@@ -1,108 +1,83 @@
-import { MD3LightTheme, MD3DarkTheme, configureFonts } from 'react-native-paper';
+import { configureFonts } from 'react-native-paper';
+import { colors as darkColors, colorsLight as lightColors } from '../theme/tokens';
 
-const manropeFonts = configureFonts({
-  isV3: true,
-  config: {
-    fontFamily: 'Manrope',
-    fontWeight: '400',
-    letterSpacing: 0,
-  },
-});
+/**
+ * Generate a Paper MD3 theme from our token system.
+ * Pass dark or light colors to get the correct theme.
+ *
+ * Typography: Inter (body) + Space Grotesk (display/headings)
+ * Note: These will be loaded separately via react-native.config.js
+ */
+export function createPaperTheme(themeColors: typeof darkColors | typeof lightColors) {
+  return {
+    dark: themeColors === darkColors,
+    roundness: 12,
+    animation: { scale: 1 },
+    fonts: configureFonts({
+      config: {
+        fontFamily: 'Inter',
+      },
+    }),
+    colors: {
+      // MD3 required colors
+      primary: themeColors.primary,
+      onPrimary: themeColors.white,
+      primaryContainer: themeColors.primaryContainer,
+      onPrimaryContainer: themeColors.onPrimaryContainer,
 
-export const paperLightTheme = {
-  ...MD3LightTheme,
-  roundness: 12,
-  fonts: manropeFonts,
-  colors: {
-    ...MD3LightTheme.colors,
-    primary: '#4F46E5',
-    onPrimary: '#FFFFFF',
-    primaryContainer: '#EEF2FF',
-    onPrimaryContainer: '#4338CA',
-    secondary: '#0EA5E9',
-    onSecondary: '#FFFFFF',
-    secondaryContainer: '#E0F2FE',
-    onSecondaryContainer: '#0369A1',
-    tertiary: '#F59E0B',
-    onTertiary: '#FFFFFF',
-    tertiaryContainer: '#FEF3C7',
-    onTertiaryContainer: '#B45309',
-    error: '#EF4444',
-    onError: '#FFFFFF',
-    errorContainer: '#FEF2F2',
-    onErrorContainer: '#B91C1C',
-    background: '#F8FAFC',
-    onBackground: '#0F172A',
-    surface: '#FFFFFF',
-    onSurface: '#0F172A',
-    surfaceVariant: '#F1F5F9',
-    onSurfaceVariant: '#64748B',
-    outline: '#CBD5E1',
-    outlineVariant: '#E2E8F0',
-    shadow: '#000000',
-    scrim: '#000000',
-    inverseSurface: '#0F172A',
-    inverseOnSurface: '#F8FAFC',
-    inversePrimary: '#818CF8',
-    elevation: {
-      level0: 'transparent',
-      level1: '#F8FAFC',
-      level2: '#F1F5F9',
-      level3: '#E2E8F0',
-      level4: '#CBD5E1',
-      level5: '#94A3B8',
+      secondary: themeColors.secondary,
+      onSecondary: themeColors.white,
+      secondaryContainer: themeColors.secondaryContainer,
+      onSecondaryContainer: themeColors.onSecondaryContainer,
+
+      tertiary: themeColors.tertiary,
+      onTertiary: themeColors.white,
+      tertiaryContainer: themeColors.tertiaryContainer,
+      onTertiaryContainer: themeColors.onTertiaryContainer,
+
+      surface: themeColors.surfacePrimary,
+      onSurface: themeColors.textPrimary,
+      surfaceVariant: themeColors.surfaceSecondary,
+      onSurfaceVariant: themeColors.textSecondary,
+      surfaceDisabled: themeColors.surfaceHover,
+      onSurfaceDisabled: themeColors.textTertiary,
+
+      background: themeColors.bgBase,
+      onBackground: themeColors.textPrimary,
+
+      error: themeColors.error,
+      onError: themeColors.white,
+      errorContainer: themeColors.errorContainer,
+      onErrorContainer: themeColors.onErrorContainer,
+
+      outline: themeColors.borderDefault,
+      outlineVariant: themeColors.borderSubtle,
+      shadow: themeColors.black,
+      scrim: themeColors.overlay,
+      success: themeColors.credit,
+      successContainer: themeColors.successContainer,
+      onSuccess: themeColors.onSuccess,
+      onSuccessContainer: themeColors.onSuccessContainer,
+
+      inverseSurface: themeColors.surfaceHover,
+      inverseOnSurface: themeColors.textPrimary,
+      inversePrimary: themeColors.primaryLight,
+
+      elevation: {
+        level0: 'transparent',
+        level1: themeColors.elevation?.level1 ?? themeColors.surfaceSecondary,
+        level2: themeColors.elevation?.level2 ?? themeColors.surfaceHover,
+        level3: themeColors.elevation?.level3 ?? themeColors.surfaceActive,
+        level4: themeColors.elevation?.level4 ?? themeColors.surfaceActive,
+        level5: themeColors.elevation?.level5 ?? themeColors.surfaceActive,
+      },
+
+      // iOS MD3 additions
+      backdrop: themeColors.overlay,
     },
-    surfaceDisabled: 'rgba(15, 23, 42, 0.12)',
-    onSurfaceDisabled: 'rgba(15, 23, 42, 0.38)',
-    backdrop: 'rgba(0, 0, 0, 0.5)',
-  },
-};
+  };
+}
 
-export const paperDarkTheme = {
-  ...MD3DarkTheme,
-  roundness: 12,
-  fonts: manropeFonts,
-  colors: {
-    ...MD3DarkTheme.colors,
-    primary: '#818CF8',
-    onPrimary: '#0F172A',
-    primaryContainer: '#312E81',
-    onPrimaryContainer: '#E0E7FF',
-    secondary: '#38BDF8',
-    onSecondary: '#0F172A',
-    secondaryContainer: '#0C4A6E',
-    onSecondaryContainer: '#E0F2FE',
-    tertiary: '#FBBF24',
-    onTertiary: '#0F172A',
-    tertiaryContainer: '#78350F',
-    onTertiaryContainer: '#FEF3C7',
-    error: '#F87171',
-    onError: '#0F172A',
-    errorContainer: '#450A0A',
-    onErrorContainer: '#FECACA',
-    background: '#0B0F19',
-    onBackground: '#F8FAFC',
-    surface: '#111827',
-    onSurface: '#F8FAFC',
-    surfaceVariant: '#1E293B',
-    onSurfaceVariant: '#94A3B8',
-    outline: '#334155',
-    outlineVariant: '#1E293B',
-    shadow: '#000000',
-    scrim: '#000000',
-    inverseSurface: '#F8FAFC',
-    inverseOnSurface: '#0F172A',
-    inversePrimary: '#4F46E5',
-    elevation: {
-      level0: 'transparent',
-      level1: '#111827',
-      level2: '#1E293B',
-      level3: '#334155',
-      level4: '#475569',
-      level5: '#64748B',
-    },
-    surfaceDisabled: 'rgba(248, 250, 252, 0.12)',
-    onSurfaceDisabled: 'rgba(248, 250, 252, 0.38)',
-    backdrop: 'rgba(0, 0, 0, 0.5)',
-  },
-};
+// Export static dark/light themes for backward compatibility
+export const paperDarkTheme = createPaperTheme(darkColors);
+export const paperLightTheme = createPaperTheme(lightColors);

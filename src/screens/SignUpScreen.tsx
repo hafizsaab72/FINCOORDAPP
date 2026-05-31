@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { TextInput, Button, Text, HelperText, SegmentedButtons, Icon } from 'react-native-paper';
+import { colors as staticColors } from '../theme/tokens';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Image, Alert } from 'react-native';
+import { TextInput, Button, Text, HelperText, SegmentedButtons } from 'react-native-paper';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import { useAppTheme } from '../context/ThemeContext';
+import { useAppTheme, useTheme } from '../context/ThemeContext';
+import { Images } from '../constants/images';
 import { useStore } from '../store/useStore';
 import { authService } from '../services/authService';
 import CountryCodePicker from '../components/CountryCodePicker';
@@ -13,6 +15,7 @@ type Tab = 'email' | 'phone';
 type PhoneStep = 'number' | 'otp';
 
 export default function SignUpScreen({ navigation }: any) {
+  const { colors } = useTheme();
   const { theme } = useAppTheme();
   const setAuth = useStore(state => state.setAuth);
   const setCurrency = useStore(state => state.setCurrency);
@@ -33,7 +36,7 @@ export default function SignUpScreen({ navigation }: any) {
   const [otp, setOtp] = useState('');
   const [phoneStep, setPhoneStep] = useState<PhoneStep>('number');
   const confirmationRef = useRef<FirebaseAuthTypes.ConfirmationResult | null>(null);
-  const cooldownRef = useRef<NodeJS.Timeout | null>(null);
+  const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -66,12 +69,16 @@ export default function SignUpScreen({ navigation }: any) {
   };
   const strength = passwordStrength(password);
   const strengthLabel = ['', 'Weak', 'Fair', 'Good', 'Strong', 'Very Strong'][strength] || '';
-  const strengthColor = ['', '#FF3B30', '#FFAA00', '#0F7A5B', '#0F7A5B', '#19A874'][strength] || theme.textSecondary;
+  const strengthColor = ['', colors.debt, colors.warning, colors.credit, colors.credit, colors.settled][strength] || theme.textSecondary;
 
   // ── Email sign-up ─────────────────────────────────────────────────────────
   const handleEmailSignUp = async () => {
     setTouched(true);
     if (name.trim().length < 2 || !emailRegex.test(email) || password.length < 6 || confirmPassword !== password) return;
+    performEmailSignUp();
+  };
+
+  const performEmailSignUp = async () => {
     haptics.medium();
     setLoading(true);
     setError('');
@@ -124,6 +131,10 @@ export default function SignUpScreen({ navigation }: any) {
   const handleVerifyOtp = async () => {
     setTouched(true);
     if (otp.length < 4) { setError('Enter the OTP sent to your phone'); return; }
+    performVerifyOtp();
+  };
+
+  const performVerifyOtp = async () => {
     haptics.medium();
     setLoading(true);
     setError('');
@@ -155,9 +166,11 @@ export default function SignUpScreen({ navigation }: any) {
     >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <View style={[styles.logoCircle, { backgroundColor: theme.primary }]}>
-            <Icon source="account-plus" size={32} color="#FFF" />
-          </View>
+          <Image
+            source={Images.logos.primary}
+            style={styles.logo}
+            resizeMode="contain"
+          />
           <Text variant="headlineMedium" style={[styles.title, { color: theme.text }]}>
             Create account
           </Text>
@@ -363,9 +376,11 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { flexGrow: 1, padding: 24 },
   header: { alignItems: 'center', gap: 10, marginBottom: 24 },
-  logoCircle: {
-    width: 72, height: 72, borderRadius: 36,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 8,
+  logo: {
+    width: 160,
+    height: 60,
+    marginBottom: 8,
+    resizeMode: 'contain',
   },
   title: { fontWeight: '700' },
   subtitle: { textAlign: 'center' },

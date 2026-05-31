@@ -1,93 +1,284 @@
 import React, { useState, useCallback, useLayoutEffect, useMemo } from 'react';
 import {
   View, StyleSheet, ScrollView, RefreshControl, StatusBar,
+  Pressable, Animated, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CLASSIC_TAB_BAR_FLOAT_OFFSET } from '../constants/tabBar';
 import {
-  Text, Icon, ActivityIndicator, TouchableRipple, Surface, Portal, Modal, List, FAB, Banner, useTheme,
+  Text, Icon, ActivityIndicator, TouchableRipple, Surface, Portal, Modal, List, FAB, Banner, useTheme, TextInput, IconButton, Searchbar,
 } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
-import { groupsService, ApiGroup, apiGroupToGroup, GroupMyBalance } from '../services/groupsService';
-import { groupColor, getGroupTypeConfig } from '../constants/groupTypes';
+import { groupsService, ApiGroup } from '../services/groupsService';
+import { groupColor, getGroupTypeConfig, getGroupIconConfig } from '../constants/groupTypes';
 import { getSymbol } from '../utils/currency';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import AppAvatar from '../components/AppAvatar';
 import AppSearchBar from '../components/AppSearchBar';
 import EmptyState from '../components/EmptyState';
 import { haptics } from '../utils/haptics';
-import { computeBalances } from '../utils/balances';
+import { colors as staticColors, spacing, radius, shadows } from '../theme/tokens';
 
-function GroupIcon({ group, size = 48 }: { group: ApiGroup; size?: number }) {
-  const config = getGroupTypeConfig(group.type);
-  const color = groupColor(group._id, group.type);
-  const paperTheme = useTheme();
+// ─── Glass hero card for summary ───────────────────────────────────────────
+function SummaryHeroCard({
+  totalOwedToYou, totalYouOwe, grandNet, symbol, onFilterPress, activeFilter,
+}: {
+  totalOwedToYou: number; totalYouOwe: number; grandNet: number;
+  symbol: string; onFilterPress: () => void; activeFilter: string;
+}) {
+  const { theme } = useAppTheme();
+  const { isOwed, isOwe, settled } = {
+    isOwed: grandNet > 0.005,
+    isOwe: grandNet < -0.005,
+    settled: Math.abs(grandNet) <= 0.005,
+  };
+
+  const netColor = settled ? theme.textSecondary : isOwed ? theme.success : theme.warning;
+
   return (
-    <View style={{
-      width: size, height: size, borderRadius: 14,
-      backgroundColor: color, justifyContent: 'center', alignItems: 'center',
-    }}>
-      <Icon source={config.icon} size={size * 0.5} color={paperTheme.colors.onPrimary} />
+    <View style={[styles.heroCard, { backgroundColor: theme.surface + 'E6', borderColor: theme.primary + '20' }]}>
+      {/* Gradient sheen overlay */}
+      <View style={styles.heroSheen} pointerEvents="none" />
+
+      {/* Net balance line */}
+      <View style={styles.heroTopRow}>
+        <View>
+          {settled ? (
+            <>
+              <Text variant="displaySmall" style={[styles.heroNetAmount, { color: theme.textSecondary }]}>
+                Settled up
+              </Text>
+              <Text variant="bodyMedium" style={{ color: theme.textSecondary, marginTop: 2 }}>
+                No outstanding balances
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text variant="displaySmall" style={[styles.heroNetAmount, { color: netColor }]}>
+                {grandNet > 0 ? '+' : '-'}{symbol}{Math.abs(grandNet).toFixed(2)}
+              </Text>
+              <Text variant="bodyMedium" style={{ color: theme.textSecondary, marginTop: 2 }}>
+                {isOwed
+                  ? `You are owed ${symbol}${totalOwedToYou.toFixed(2)}`
+                  : `You owe ${symbol}${totalYouOwe.toFixed(2)}`}
+              </Text>
+            </>
+          )}
+        </View>
+        <TouchableRipple onPress={onFilterPress} borderless style={styles.filterBtn}>
+          <Icon source="tune" size={22} color={theme.textSecondary} />
+        </TouchableRipple>
+      </View>
+
+      {/* Stat pills */}
+      <View style={styles.statPillsRow}>
+        <StatPill
+          label="Owed to you"
+          value={`${symbol}${totalOwedToYou.toFixed(2)}`}
+          type="positive"
+        />
+        <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
+        <StatPill
+          label="You owe"
+          value={`${symbol}${totalYouOwe.toFixed(2)}`}
+          type="negative"
+        />
+      </View>
     </View>
   );
 }
 
-/** Merge API myBalance with locally computed balances for a group */
-function mergeGroupBalance(
-  apiBalance: GroupMyBalance | undefined,
-  localExpenses: Array<{ payerId: string; amount: number; splitMethod: string; splitDetails: Record<string, number> }>,
-  myId: string,
-  memberNames: Record<string, string>,
-): GroupMyBalance {
-  if (localExpenses.length === 0) {
-    return apiBalance ?? { net: 0, totalOwedToYou: 0, totalYouOwe: 0, topDebts: [] };
-  }
+function StatPill({ label, value, type }: { label: string; value: string; type: 'positive' | 'negative' | 'neutral' }) {
+  const { theme } = useAppTheme();
+  const color = type === 'positive' ? theme.success : type === 'negative' ? theme.warning : theme.textSecondary;
+  const borderColor = color + '40';
 
-  const computed = computeBalances(
-    localExpenses.map(e => ({ payerId: e.payerId, amount: e.amount, splitMethod: e.splitMethod, splitDetails: e.splitDetails })),
-    myId,
-    memberNames,
+  return (
+    <View style={[styles.statPill, { borderTopColor: color }]}>
+      <Text variant="labelSmall" style={{ color: theme.textSecondary, letterSpacing: 0.04 }}>
+        {label}
+      </Text>
+      <Text variant="titleMedium" style={{ color, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+        {value}
+      </Text>
+    </View>
   );
+}
 
-  const localNet = computed.totalOwedToYou - computed.totalYouOwe;
+// ─── Filter pills (horizontal scroll) ──────────────────────────────────────
+function FilterPills({ active, onChange }: {
+  active: string; onChange: (f: 'none' | 'outstanding' | 'you_owe' | 'owed_to_you') => void;
+}) {
+  const { theme } = useAppTheme();
+  const pills = [
+    { key: 'none', label: 'All' },
+    { key: 'outstanding', label: 'Active' },
+    { key: 'you_owe', label: 'You owe' },
+    { key: 'owed_to_you', label: 'Owed to you' },
+  ] as const;
 
-  // If API has no balance data or API says settled up but local says otherwise, use local
-  const useLocal = !apiBalance || (Math.abs(apiBalance.net) < 0.005 && Math.abs(localNet) > 0.005);
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.filterPillsContainer}
+    >
+      {pills.map(p => {
+        const activeP = active === p.key;
+        return (
+          <Pressable
+            key={p.key}
+            onPress={() => onChange(p.key)}
+            style={[
+              styles.filterPill,
+              activeP
+                ? { backgroundColor: theme.primary + '20', borderColor: theme.primary }
+                : { backgroundColor: 'transparent', borderColor: theme.outlineVariant },
+            ]}
+          >
+            <Text
+              variant="labelMedium"
+              style={{
+                color: activeP ? theme.primary : theme.textSecondary,
+                fontWeight: activeP ? '600' : '400',
+              }}
+            >
+              {p.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
 
-  if (!useLocal && apiBalance) {
-    return apiBalance;
-  }
+// ─── Group card (glass + glow) ───────────────────────────────────────────────
+function GroupCard({ item, symbol, onPress }: {
+  item: ApiGroup; symbol: string; onPress: () => void;
+}) {
+  const { theme } = useAppTheme();
+  const scaleAnim = React.useRef(new Animated.Value(1)).current;
+  const balance = item.myBalance;
+  const net = balance?.net ?? 0;
+  const isOwed = net > 0.005;
+  const isOwe = net < -0.005;
+  const isSettled = !isOwed && !isOwe;
+  const memberCount = item.members?.length ?? 0;
+  const groupColorVal = groupColor(item._id, item.type);
+  const iconConfig = item.icon ? getGroupIconConfig(item.icon) : null;
+  const typeConfig = getGroupTypeConfig(item.type);
 
-  // Build topDebts from computed memberBalances
-  const topDebts = computed.memberBalances
-    .filter(m => Math.abs(m.net) > 0.005)
-    .sort((a, b) => Math.abs(b.net) - Math.abs(a.net))
-    .map(m => ({ userId: m.memberId, name: m.name, net: m.net }));
+  const netColor = isSettled ? theme.textSecondary : isOwed ? theme.success : theme.warning;
 
-  return {
-    net: localNet,
-    totalOwedToYou: computed.totalOwedToYou,
-    totalYouOwe: computed.totalYouOwe,
-    topDebts,
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true }).start();
   };
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
+  };
+
+  return (
+    <Animated.View style={[styles.cardWrapper, { transform: [{ scale: scaleAnim }] }]}>
+      <Pressable
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onPress={() => {
+          haptics.selection();
+          onPress();
+        }}
+        style={({ pressed }) => [
+          styles.groupCard,
+          {
+            backgroundColor: theme.surface + 'E6',
+            borderColor: theme.border + '10',
+            opacity: pressed ? 0.85 : 1,
+          },
+          // Active balance → glow border
+          isOwed && { borderColor: theme.success + '35', borderWidth: 1.5 },
+          isOwe && { borderColor: theme.warning + '35', borderWidth: 1.5 },
+        ]}
+      >
+        {/* Left accent bar */}
+        <View style={[styles.cardAccent, { backgroundColor: groupColorVal }]} />
+
+        {/* Content */}
+        <View style={styles.cardContent}>
+          {/* Icon + Info */}
+          <View style={styles.cardLeft}>
+            <View style={[styles.iconBox, { backgroundColor: groupColorVal + '1A' }]}>
+              <Icon
+                source={iconConfig?.icon ?? typeConfig.icon}
+                size={20}
+                color={groupColorVal}
+              />
+            </View>
+            <View style={styles.cardInfo}>
+              <Text variant="titleMedium" style={{ color: theme.text, fontWeight: '600' }} numberOfLines={1}>
+                {item.name}
+              </Text>
+              <Text variant="bodySmall" style={{ color: theme.textSecondary, marginTop: 2 }}>
+                {memberCount} {memberCount === 1 ? 'member' : 'members'}
+                {balance?.topDebts && balance.topDebts.length > 0
+                  ? ` · ${balance.topDebts.length} balance${balance.topDebts.length > 1 ? 's' : ''}`
+                  : ''}
+              </Text>
+              {/* Top debt preview */}
+              {balance?.topDebts.slice(0, 1).map(d => (
+                <Text key={d.userId} variant="bodySmall" style={{ color: theme.textSecondary, marginTop: 2 }}>
+                  {d.net > 0 ? `${d.name} owes you` : `You owe ${d.name}`}{' '}
+                  <Text style={{ color: d.net > 0 ? theme.success : theme.warning, fontWeight: '600' }}>
+                    {symbol}{Math.abs(d.net).toFixed(2)}
+                  </Text>
+                </Text>
+              ))}
+            </View>
+          </View>
+
+          {/* Balance pill */}
+          <View style={[
+            styles.balancePill,
+            {
+              backgroundColor: netColor + '15',
+              borderColor: netColor + '30',
+            },
+          ]}>
+            {isSettled ? (
+              <Text variant="labelSmall" style={{ color: theme.textSecondary }}>settled</Text>
+            ) : (
+              <>
+                <Text variant="labelSmall" style={{ color: netColor, opacity: 0.8 }}>
+                  {isOwed ? 'owed to you' : 'you owe'}
+                </Text>
+                <Text variant="titleSmall" style={{ color: netColor, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                  {symbol}{Math.abs(net).toFixed(2)}
+                </Text>
+              </>
+            )}
+          </View>
+        </View>
+
+        {/* Chevron */}
+        <View style={styles.cardChevron}>
+          <Icon source="chevron-right" size={20} color={theme.textTertiary} />
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
 }
 
 export default function GroupsScreen({ navigation }: any) {
+  const { colors } = useTheme();
   const { theme, isDark } = useAppTheme();
   const paperTheme = useTheme();
   const insets = useSafeAreaInsets();
   const currentUser = useStore(state => state.currentUser);
-  const setGroups = useStore(state => state.setGroups);
-  const expenses = useStore(state => state.expenses);
   const symbol = getSymbol(currentUser?.currency ?? 'USD');
-  const myId = currentUser?.id ?? '';
 
   const [apiGroups, setApiGroups] = useState<ApiGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState(false);
-  const [searchVisible, setSearchVisible] = useState(false);
   const [query, setQuery] = useState('');
   const [filterVisible, setFilterVisible] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'none' | 'outstanding' | 'you_owe' | 'owed_to_you'>('none');
@@ -100,14 +291,13 @@ export default function GroupsScreen({ navigation }: any) {
     try {
       const data = await groupsService.getAll();
       setApiGroups(data.groups);
-      setGroups(data.groups.map(apiGroupToGroup));
     } catch {
       setFetchError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [currentUser, setGroups]);
+  }, [currentUser]);
 
   useFocusEffect(useCallback(() => {
     fetchGroups();
@@ -115,55 +305,42 @@ export default function GroupsScreen({ navigation }: any) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
+      headerTitle: () => (
+        query.length > 0 ? (
+          <Searchbar
+            placeholder="Search groups…"
+            value={query}
+            onChangeText={setQuery}
+            autoFocus
+            style={{
+              flex: 1,
+              maxWidth: 300,
+              height: 40,
+              backgroundColor: theme.surface + 'CC',
+            }}
+            inputStyle={{ color: theme.text }}
+            iconColor={theme.textSecondary}
+            placeholderTextColor={theme.textSecondary}
+          />
+        ) : (
+          <Text variant="titleLarge" style={{ color: theme.text, fontWeight: '700' }}>Groups</Text>
+        )
+      ),
       headerRight: () => (
-        <TouchableRipple onPress={() => navigation.navigate('CreateGroupModal')} style={{ marginRight: 16 }} borderless>
-          <Text variant="labelLarge" style={{ color: theme.primary }}>Create group</Text>
-        </TouchableRipple>
-      ),
-      headerLeft: () => (
-        <TouchableRipple onPress={() => setSearchVisible(v => !v)} style={{ marginLeft: 16 }} borderless>
-          <Icon source={searchVisible ? 'close' : 'magnify'} size={24} color={theme.primary} />
-        </TouchableRipple>
+        query.length === 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <IconButton icon="magnify" size={24} iconColor={theme.text} onPress={() => setQuery(' ')} style={{ padding: 10 }} />
+            <IconButton icon="account-plus-outline" size={24} iconColor={theme.primary} onPress={() => navigation.navigate('CreateGroupModal')} style={{ padding: 10 }} />
+          </View>
+        )
       ),
     });
-  }, [navigation, theme.primary, searchVisible]);
+  }, [navigation, theme, query]);
 
-  // Build member name maps for each group
-  const groupMemberNames = useMemo(() => {
-    const maps: Record<string, Record<string, string>> = {};
-    for (const g of apiGroups) {
-      const map: Record<string, string> = {};
-      g.members.forEach(m => { map[m._id] = m.name; });
-      maps[g._id] = map;
-    }
-    return maps;
-  }, [apiGroups]);
-
-  // Compute merged balances for each group
-  const groupsWithBalances = useMemo(() => {
-    const localByGroup: Record<string, typeof expenses> = {};
-    for (const e of expenses) {
-      if (!e.groupId || e.groupId === 'direct') continue;
-      if (!localByGroup[e.groupId]) localByGroup[e.groupId] = [];
-      localByGroup[e.groupId].push(e);
-    }
-
-    return apiGroups.map(g => {
-      const localExps = localByGroup[g._id] ?? [];
-      const mergedBalance = mergeGroupBalance(
-        g.myBalance,
-        localExps.map(e => ({ payerId: e.payerId, amount: e.amount, splitMethod: e.splitMethod, splitDetails: e.splitDetails })),
-        myId,
-        groupMemberNames[g._id] ?? {},
-      );
-      return { ...g, myBalance: mergedBalance };
-    });
-  }, [apiGroups, expenses, myId, groupMemberNames]);
-
-  const filteredGroups = (() => {
+  const filteredGroups = useMemo(() => {
     let groups = query.trim()
-      ? groupsWithBalances.filter(g => g.name.toLowerCase().includes(query.toLowerCase()))
-      : groupsWithBalances;
+      ? apiGroups.filter(g => g.name.toLowerCase().includes(query.toLowerCase().trim()))
+      : apiGroups;
     switch (activeFilter) {
       case 'outstanding':
         groups = groups.filter(g => Math.abs(g.myBalance?.net ?? 0) > 0.005);
@@ -176,95 +353,19 @@ export default function GroupsScreen({ navigation }: any) {
         break;
     }
     return groups;
-  })();
+  }, [query, activeFilter, apiGroups]);
 
-  // Split into active (non-zero balance) and settled
-  const activeGroups = filteredGroups.filter(g => Math.abs(g.myBalance?.net ?? 0) > 0.005);
-  const settledGroups = filteredGroups.filter(g => Math.abs(g.myBalance?.net ?? 0) <= 0.005);
+  const activeGroups = useMemo(() =>
+    filteredGroups.filter(g => Math.abs(g.myBalance?.net ?? 0) > 0.005)
+  , [filteredGroups]);
 
-  // Overall summary (includes direct expenses)
-  const totalOwedToYou = groupsWithBalances.reduce((s, g) => s + (g.myBalance?.totalOwedToYou ?? 0), 0);
-  const totalYouOwe = groupsWithBalances.reduce((s, g) => s + (g.myBalance?.totalYouOwe ?? 0), 0);
+  const settledGroups = useMemo(() =>
+    filteredGroups.filter(g => Math.abs(g.myBalance?.net ?? 0) <= 0.005)
+  , [filteredGroups]);
 
-  // Non-group expenses
-  const directExpenses = expenses.filter(e => e.groupId === 'direct');
-  const directBalances = computeBalances(
-    directExpenses.map(e => ({
-      payerId: e.payerId,
-      amount: e.amount,
-      splitMethod: e.splitMethod,
-      splitDetails: e.splitDetails,
-    })),
-    myId,
-  );
-  const directTotalOwedToYou = directBalances.totalOwedToYou;
-  const directTotalYouOwe = directBalances.totalYouOwe;
-  const directNet = directTotalOwedToYou - directTotalYouOwe;
-
-  // Grand total including direct expenses
-  const grandTotalOwedToYou = totalOwedToYou + directTotalOwedToYou;
-  const grandTotalYouOwe = totalYouOwe + directTotalYouOwe;
-  const grandNet = grandTotalOwedToYou - grandTotalYouOwe;
-
-  const renderGroup = ({ item }: { item: ApiGroup & { myBalance?: GroupMyBalance } }) => {
-    const balance = item.myBalance;
-    const net = balance?.net ?? 0;
-    const isOwed = net > 0.005;
-    const isOwe = net < -0.005;
-    const memberCount = item.members?.length ?? 0;
-
-    return (
-      <TouchableRipple
-        onPress={() => {
-          haptics.selection();
-          navigation.navigate('GroupDetail', { groupId: item._id, groupName: item.name });
-        }}
-      >
-        <Surface elevation={1} style={[styles.groupRow, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
-          <GroupIcon group={item} />
-          <View style={styles.groupInfo}>
-            <Text variant="titleMedium" style={{ color: theme.text }} numberOfLines={1}>
-              {item.name}
-            </Text>
-            <Text variant="bodySmall" style={{ color: theme.textSecondary, marginTop: 2 }}>
-              {memberCount} {memberCount === 1 ? 'member' : 'members'}
-              {balance?.topDebts && balance.topDebts.length > 0 ? ' · ' + balance.topDebts.length + ' balance' + (balance.topDebts.length > 1 ? 's' : '') : ''}
-            </Text>
-            {/* Per-person breakdowns */}
-            {balance?.topDebts.slice(0, 1).map(d => (
-              <Text key={d.userId} variant="bodySmall" style={{ color: theme.textSecondary, marginTop: 2 }}>
-                {d.net > 0 ? `${d.name} owes you` : `You owe ${d.name}`}{' '}
-                <Text style={{ color: d.net > 0 ? theme.success : theme.warning, fontWeight: '600' }}>
-                  {symbol}{Math.abs(d.net).toFixed(2)}
-                </Text>
-              </Text>
-            ))}
-          </View>
-          <View style={styles.groupBalance}>
-            {isOwed && (
-              <>
-                <Text variant="labelSmall" style={{ color: theme.success, textAlign: 'right' }}>you are owed</Text>
-                <Text variant="titleSmall" style={{ color: theme.success, fontWeight: '700' }}>
-                  {symbol}{net.toFixed(2)}
-                </Text>
-              </>
-            )}
-            {isOwe && (
-              <>
-                <Text variant="labelSmall" style={{ color: theme.warning, textAlign: 'right' }}>you owe</Text>
-                <Text variant="titleSmall" style={{ color: theme.warning, fontWeight: '700' }}>
-                  {symbol}{Math.abs(net).toFixed(2)}
-                </Text>
-              </>
-            )}
-            {!isOwed && !isOwe && (
-              <Text variant="labelSmall" style={{ color: theme.textSecondary, textAlign: 'right' }}>settled up</Text>
-            )}
-          </View>
-        </Surface>
-      </TouchableRipple>
-    );
-  };
+  const totalOwedToYou = apiGroups.reduce((s, g) => s + (g.myBalance?.totalOwedToYou ?? 0), 0);
+  const totalYouOwe = apiGroups.reduce((s, g) => s + (g.myBalance?.totalYouOwe ?? 0), 0);
+  const grandNet = totalOwedToYou - totalYouOwe;
 
   if (loading && apiGroups.length === 0) {
     return (
@@ -274,28 +375,10 @@ export default function GroupsScreen({ navigation }: any) {
     );
   }
 
-  const summaryCardBg = Math.abs(grandNet) < 0.005
-    ? theme.border + '40'
-    : grandNet > 0
-    ? theme.success + '15'
-    : theme.warning + '15';
-
-  const summaryIcon = Math.abs(grandNet) < 0.005
-    ? 'check-circle-outline'
-    : grandNet > 0
-    ? 'arrow-down-circle-outline'
-    : 'arrow-up-circle-outline';
-
-  const summaryColor = Math.abs(grandNet) < 0.005
-    ? theme.textSecondary
-    : grandNet > 0
-    ? theme.success
-    : theme.warning;
-
   return (
-    <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-      {/* Error banner */}
+
       {fetchError && (
         <Banner
           visible
@@ -306,131 +389,79 @@ export default function GroupsScreen({ navigation }: any) {
         </Banner>
       )}
 
-      {/* Search */}
-      {searchVisible && (
-        <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
-          <AppSearchBar
-            placeholder="Search groups…"
-            value={query}
-            onChangeText={setQuery}
-          />
-        </View>
-      )}
-
       <ScrollView
         style={{ flex: 1 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchGroups(true)} />}
-        contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
+        contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}
       >
-        {/* Summary card */}
-        {groupsWithBalances.length > 0 && (
-          <Surface elevation={2} style={[styles.summaryCard, { backgroundColor: summaryCardBg, borderColor: summaryColor + '40' }]}>
-            <View style={styles.summaryCardRow}>
-              <Icon source={summaryIcon} size={32} color={summaryColor} />
-              <View style={{ flex: 1, marginLeft: 14 }}>
-                <Text variant="titleLarge" style={{ color: theme.text, fontWeight: '700' }}>
-                  {Math.abs(grandNet) < 0.005
-                    ? 'You are all settled up'
-                    : grandNet > 0
-                    ? `${symbol}${grandNet.toFixed(2)}`
-                    : `${symbol}${Math.abs(grandNet).toFixed(2)}`}
-                </Text>
-                <Text variant="bodyMedium" style={{ color: theme.textSecondary, marginTop: 2 }}>
-                  {Math.abs(grandNet) < 0.005
-                    ? 'No outstanding balances'
-                    : grandNet > 0
-                    ? `You are owed ${symbol}${grandTotalOwedToYou.toFixed(2)} total`
-                    : `You owe ${symbol}${grandTotalYouOwe.toFixed(2)} total`}
-                </Text>
-              </View>
-              <TouchableRipple onPress={() => setFilterVisible(true)} borderless style={styles.filterBtn}>
-                <Icon source="tune" size={22} color={theme.textSecondary} />
-              </TouchableRipple>
-            </View>
-          </Surface>
+        {/* Hero summary card */}
+        {apiGroups.length > 0 && (
+          <View style={{ paddingHorizontal: 16, marginTop: 12, marginBottom: 16 }}>
+            <SummaryHeroCard
+              totalOwedToYou={totalOwedToYou}
+              totalYouOwe={totalYouOwe}
+              grandNet={grandNet}
+              symbol={symbol}
+              onFilterPress={() => setFilterVisible(true)}
+              activeFilter={activeFilter}
+            />
+          </View>
+        )}
+
+        {/* Filter pills */}
+        {apiGroups.length > 0 && (
+          <FilterPills active={activeFilter} onChange={setActiveFilter} />
         )}
 
         {filteredGroups.length === 0 ? (
-          <EmptyState
-            icon="account-group-outline"
-            title={query ? 'No groups match your search.' : 'No groups yet.'}
-            subtitle={query ? undefined : 'Tap "Create group" to get started.'}
-          />
+          <View style={{ paddingTop: 40 }}>
+            <EmptyState
+              icon="account-group-outline"
+              title={query ? 'No groups match your search.' : 'No groups yet.'}
+              subtitle={query ? undefined : 'Tap "Create group" to get started.'}
+            />
+          </View>
         ) : (
           <>
-            {/* Active groups */}
             {activeGroups.length > 0 && (
               <View style={styles.section}>
-                <Text variant="labelSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
-                  {activeGroups.length} ACTIVE BALANCE{activeGroups.length > 1 ? 'S' : ''}
-                </Text>
+                {!query && activeFilter === 'none' && (
+                  <Text variant="labelSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+                    {activeGroups.length} ACTIVE BALANCE{activeGroups.length > 1 ? 'S' : ''}
+                  </Text>
+                )}
                 {activeGroups.map(item => (
-                  <React.Fragment key={item._id}>{renderGroup({ item })}</React.Fragment>
+                  <GroupCard
+                    key={item._id}
+                    item={item}
+                    symbol={symbol}
+                    onPress={() => navigation.navigate('GroupDetail', {
+                      groupId: item._id, groupName: item.name,
+                      groupIcon: item.icon, groupImage: item.image,
+                    })}
+                  />
                 ))}
               </View>
             )}
 
-            {/* Settled groups section */}
             {settledGroups.length > 0 && (
               <View style={[styles.section, activeGroups.length > 0 && { marginTop: 8 }]}>
-                {activeGroups.length > 0 && (
+                {activeGroups.length > 0 && !query && (
                   <Text variant="labelSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
                     SETTLED UP
                   </Text>
                 )}
                 {settledGroups.map(item => (
-                  <React.Fragment key={item._id}>{renderGroup({ item })}</React.Fragment>
+                  <GroupCard
+                    key={item._id}
+                    item={item}
+                    symbol={symbol}
+                    onPress={() => navigation.navigate('GroupDetail', {
+                      groupId: item._id, groupName: item.name,
+                      groupIcon: item.icon, groupImage: item.image,
+                    })}
+                  />
                 ))}
-              </View>
-            )}
-
-            {/* Non-group expenses */}
-            {directExpenses.length > 0 && (
-              <View style={[styles.section, { marginTop: 8 }]}>
-                <Text variant="labelSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
-                  NON-GROUP EXPENSES
-                </Text>
-                <TouchableRipple
-                  onPress={() => {
-                    haptics.selection();
-                    navigation.navigate('ActivityTab', { screen: 'Activity' });
-                  }}
-                >
-                  <Surface elevation={1} style={[styles.groupRow, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
-                    <View style={[styles.nonGroupIcon, { backgroundColor: theme.primary }]}>
-                      <Icon source="cash-multiple" size={22} color={paperTheme.colors.onPrimary} />
-                    </View>
-                    <View style={styles.groupInfo}>
-                      <Text variant="titleMedium" style={{ color: theme.text }} numberOfLines={1}>
-                        Non-group expenses
-                      </Text>
-                      <Text variant="bodySmall" style={{ color: theme.textSecondary, marginTop: 2 }}>
-                        {directExpenses.length} expense{directExpenses.length !== 1 ? 's' : ''}
-                      </Text>
-                    </View>
-                    <View style={styles.groupBalance}>
-                      {directNet > 0.005 && (
-                        <>
-                          <Text variant="labelSmall" style={{ color: theme.success, textAlign: 'right' }}>you are owed</Text>
-                          <Text variant="titleSmall" style={{ color: theme.success, fontWeight: '700' }}>
-                            {symbol}{directNet.toFixed(2)}
-                          </Text>
-                        </>
-                      )}
-                      {directNet < -0.005 && (
-                        <>
-                          <Text variant="labelSmall" style={{ color: theme.warning, textAlign: 'right' }}>you owe</Text>
-                          <Text variant="titleSmall" style={{ color: theme.warning, fontWeight: '700' }}>
-                            {symbol}{Math.abs(directNet).toFixed(2)}
-                          </Text>
-                        </>
-                      )}
-                      {Math.abs(directNet) <= 0.005 && (
-                        <Text variant="labelSmall" style={{ color: theme.textSecondary, textAlign: 'right' }}>settled up</Text>
-                      )}
-                    </View>
-                  </Surface>
-                </TouchableRipple>
               </View>
             )}
           </>
@@ -448,14 +479,14 @@ export default function GroupsScreen({ navigation }: any) {
           ]}
         >
           <Text variant="titleMedium" style={styles.modalTitle}>
-            Set filter
+            Filter groups
           </Text>
-          {[
-            { key: 'none' as const, label: 'None' },
-            { key: 'outstanding' as const, label: 'Groups with outstanding balances' },
-            { key: 'you_owe' as const, label: 'Group balances you owe' },
-            { key: 'owed_to_you' as const, label: 'Group balances you are owed' },
-          ].map(option => (
+          {([
+            { key: 'none' as const, label: 'All groups' },
+            { key: 'outstanding' as const, label: 'Groups with balances' },
+            { key: 'you_owe' as const, label: 'Balances you owe' },
+            { key: 'owed_to_you' as const, label: 'Balances you are owed' },
+          ] as const).map(option => (
             <List.Item
               key={option.key}
               title={option.label}
@@ -478,12 +509,19 @@ export default function GroupsScreen({ navigation }: any) {
       </Portal>
 
       {/* FABs */}
-      <View style={[styles.fabContainer, { bottom: Math.max(24, insets.bottom + 8) }]}>
+      <View style={[styles.fabContainer, { bottom: insets.bottom + CLASSIC_TAB_BAR_FLOAT_OFFSET, gap: 12 }]}>
         <FAB
           icon="qrcode-scan"
           size="small"
-          style={[styles.fabScan, { backgroundColor: theme.surface }]}
-          color={theme.primary}
+          style={[
+            styles.fabScan,
+            {
+              backgroundColor: theme.surface + 'CC',
+              borderWidth: 1,
+              borderColor: theme.outlineVariant + '60',
+            },
+          ]}
+          color={theme.textSecondary}
           onPress={() => {
             haptics.medium();
             navigation.navigate('QRScanner');
@@ -491,12 +529,26 @@ export default function GroupsScreen({ navigation }: any) {
         />
         <FAB
           icon="plus"
-          label="Add expense"
-          style={[styles.fabAdd, { backgroundColor: theme.primary }]}
-          color={paperTheme.colors.onPrimary}
+          style={[
+            styles.fabAdd,
+            {
+              backgroundColor: theme.primary,
+              borderRadius: 16,
+              ...Platform.select({
+                ios: {
+                  shadowColor: theme.primary,
+                  shadowOpacity: 0.4,
+                  shadowRadius: 12,
+                  shadowOffset: { width: 0, height: 4 },
+                },
+                android: {},
+              }),
+            },
+          ]}
+          color="#FFFFFF"
           onPress={() => {
             haptics.medium();
-            navigation.navigate('AddExpenseModal', {});
+            navigation.navigate('AddExpense', {});
           }}
         />
       </View>
@@ -507,57 +559,148 @@ export default function GroupsScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  summaryCard: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 4,
-    borderRadius: 16,
-    padding: 18,
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16 },
+  headerTitle: {},
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  headerIconBtn: { padding: 10 },
+  inlineSearch: { flex: 1, height: 48, borderRadius: 12 },
+
+  // ── Hero card ──────────────────────────────────────────────────────────────
+  heroCard: {
+    borderRadius: 18,
+    padding: 20,
     borderWidth: 1,
+    // Uses inline style: backgroundColor=theme.surface+'E6', borderColor=theme.primary+'20'
+    overflow: 'hidden',
   },
-  summaryCardRow: {
+  heroSheen: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
+    height: 60,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  heroTopRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  heroNetAmount: {
+    fontWeight: '700',
+    fontSize: 28,
+    letterSpacing: -0.5,
   },
   filterBtn: {
-    width: 40,
-    height: 40,
+    width: 40, height: 40,
     borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center', alignItems: 'center',
   },
-  section: {
-    marginTop: 12,
+  statPillsRow: {
+    flexDirection: 'row',
+    marginTop: 16,
+    gap: 0,
   },
-  sectionLabel: {
+  statPill: {
+    flex: 1,
+    borderTopWidth: 2,
+    paddingTop: 10,
+    paddingHorizontal: 4,
+  },
+  statDivider: {
+    width: 1,
+    marginHorizontal: 12,
+    alignSelf: 'stretch',
+    marginTop: 2,
+  },
+
+  // ── Filter pills ────────────────────────────────────────────────────────────
+  filterPillsContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+    gap: 8,
+    marginBottom: 16,
+    flexDirection: 'row',
   },
-  groupRow: {
+  filterPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+
+  // ── Group card ──────────────────────────────────────────────────────────────
+  cardWrapper: {
+    marginBottom: 0,
+  },
+  groupCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     marginHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 8,
+    marginBottom: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    // backgroundColor + borderColor use inline style with theme.surface/theme.border
+    overflow: 'hidden',
   },
-  groupInfo: { flex: 1 },
-  groupBalance: { alignItems: 'flex-end', minWidth: 90 },
+  cardAccent: {
+    width: 4,
+    alignSelf: 'stretch',
+  },
+  cardContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingRight: 12,
+  },
+  cardLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingLeft: 14,
+  },
+  iconBox: {
+    width: 40, height: 40,
+    borderRadius: 10,
+    justifyContent: 'center', alignItems: 'center',
+    flexShrink: 0,
+  },
+  cardInfo: { flex: 1 },
+  cardChevron: {
+    marginLeft: 4,
+    flexShrink: 0,
+  },
+  balancePill: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignItems: 'center',
+    minWidth: 80,
+  },
+
+  // ── Sections ───────────────────────────────────────────────────────────────
+  section: {
+    marginTop: 4,
+  },
+  sectionLabel: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    fontWeight: '600',
+    letterSpacing: 0.08,
+    fontSize: 11,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+
+  // ── FABs ───────────────────────────────────────────────────────────────────
   fabContainer: {
     position: 'absolute', right: 16,
     flexDirection: 'row', alignItems: 'center', gap: 10,
   },
   fabScan: {},
   fabAdd: {},
-  nonGroupIcon: {
-    width: 48, height: 48, borderRadius: 14,
-    justifyContent: 'center', alignItems: 'center',
-  },
+
+  // ── Modal ──────────────────────────────────────────────────────────────────
   modalSheet: {
     marginTop: 'auto',
     marginHorizontal: 0,

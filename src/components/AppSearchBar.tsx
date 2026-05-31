@@ -29,8 +29,8 @@ export default function AppSearchBar({
       style={[
         styles.searchbar,
         {
-          backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.outline,
+          backgroundColor: theme.colors.surfaceVariant,
+          borderColor: theme.colors.outlineVariant,
         },
       ]}
       inputStyle={{ color: theme.colors.onSurface }}
@@ -42,7 +42,7 @@ export default function AppSearchBar({
 
 const styles = StyleSheet.create({
   searchbar: {
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     height: 48,
     marginVertical: 8,

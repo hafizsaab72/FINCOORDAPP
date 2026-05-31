@@ -19,7 +19,7 @@ end
 # Required for react-native-firebase with Firebase 11+ (Swift-based modules)
 $RNFirebaseAsStaticFramework = true
 
-target 'FinCoordApp' do
+target 'OnTheTab' do
   config = use_native_modules!
 
   use_react_native!(

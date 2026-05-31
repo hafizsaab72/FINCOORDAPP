@@ -1,18 +1,20 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import { View, StyleSheet, FlatList, ScrollView, RefreshControl, Alert } from 'react-native';
+import { View, StyleSheet, FlatList, ScrollView, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Surface, Text, Chip, List, Divider, Icon, Button, FAB } from 'react-native-paper';
+import { CLASSIC_TAB_BAR_FLOAT_OFFSET } from '../constants/tabBar';
 import { useStore } from '../store/useStore';
-import { useAppTheme } from '../context/ThemeContext';
-import { formatAmount } from '../utils/currency';
-import { Bill } from '../types';
+import { useAppTheme, useTheme } from '../context/ThemeContext';
+import { formatAmount, fromMinorUnits } from '../utils/currency';
+import { useGlobalBalances } from '../hooks/useDashboard';
+import { Activity } from '../types';
 import { activitiesService } from '../services/activitiesService';
-import { billsService } from '../services/billsService';
 import EmptyState from '../components/EmptyState';
 import { haptics } from '../utils/haptics';
 import { getActivityIcon, getActivityColor, relativeTime } from '../utils/ui';
+import { colors as staticColors, spacing, radius, shadows } from '../theme/tokens';
 
-type Filter = 'all' | 'expenses' | 'bills' | 'reminders' | 'payments';
+type Filter = 'all' | 'expenses' | 'settlements';
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
   USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥', CAD: 'CA$',
@@ -20,176 +22,70 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 };
 
 export default function ActivityScreen({ navigation }: any) {
+  const { colors } = useTheme();
   const { theme, isDark } = useAppTheme();
   const insets = useSafeAreaInsets();
-  const activities      = useStore(state => state.activities);
-  const bills           = useStore(state => state.bills);
-  const expenses        = useStore(state => state.expenses);
-  const currency        = useStore(state => state.currency);
-  const token           = useStore(state => state.token);
-  const markBillHandled = useStore(state => state.markBillHandled);
-  const deleteBill      = useStore(state => state.deleteBill);
-  const setBills        = useStore(state => state.setBills);
+  const currency = useStore(state => state.currency);
+  const token = useStore(state => state.token);
+
+  const { data: dashboard } = useGlobalBalances();
 
   const [activeFilter, setActiveFilter] = React.useState<Filter>('all');
   const [refreshing, setRefreshing] = useState(false);
+  const [apiActivities, setApiActivities] = useState<Activity[]>([]);
 
-  // Fetch activities from API on mount and merge with local
   const fetchActivities = useCallback(async () => {
     if (!token) return;
     try {
       const res = await activitiesService.getAll(50);
-      if (!res?.activities) return;
-      // Merge: API entries take precedence; preserve local amount/currency if API omits them
-      const apiIds = new Set(res.activities.map((a: any) => a.id ?? a._id));
-      const localMap = new Map(useStore.getState().activities.map(a => [a.id, a]));
-      const merged = [
-        ...res.activities.map((a: any) => {
-          const local = localMap.get(a.id ?? a._id);
-          return {
-            id: a.id ?? a._id,
-            action: a.action,
-            detail: a.detail,
-            timestamp: a.timestamp ?? a.createdAt,
-            amount: a.amount ?? local?.amount,
-            currency: a.currency ?? local?.currency,
-          };
-        }),
-        ...useStore.getState().activities.filter(a => !apiIds.has(a.id)),
-      ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      useStore.setState({ activities: merged });
+      if (res?.activities) {
+        setApiActivities(res.activities);
+      }
     } catch {
-      // Silent fail — local activities remain
+      // Silent fail
     }
   }, [token]);
 
   useEffect(() => { fetchActivities(); }, [fetchActivities]);
 
-  // One-time patch: recover amount/currency for activities that were stripped by older API fetches
-  useEffect(() => {
-    const acts = useStore.getState().activities;
-    const exps = useStore.getState().expenses;
-    const bills = useStore.getState().bills;
-    const needsPatch = acts.some(a =>
-      (a.action.includes('Expense') || a.action.includes('Bill')) && a.amount === undefined,
-    );
-    if (!needsPatch) return;
-    const patched = acts.map(a => {
-      if (a.amount !== undefined) return a;
-      if (a.action.includes('Expense')) {
-        const match = exps.find(e => e.notes === a.detail || e.id === a.detail);
-        if (match) return { ...a, amount: match.amount, currency: match.currency };
-      }
-      if (a.action.includes('Bill')) {
-        const match = bills.find(b => b.title === a.detail || b.id === a.detail);
-        if (match) return { ...a, amount: match.amount, currency: match.currency };
-      }
-      return a;
-    });
-    useStore.setState({ activities: patched });
-  }, []);
-
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([
-      fetchActivities(),
-      token ? billsService.getAll().then(r => { if (r?.bills) setBills(r.bills); }).catch(() => {}) : Promise.resolve(),
-    ]);
+    await fetchActivities();
     setRefreshing(false);
-  }, [fetchActivities, token, setBills]);
+  }, [fetchActivities]);
 
-  const handleMarkHandled = useCallback((id: string) => {
-    markBillHandled(id);
-    if (token) {
-      billsService.markHandled(id).catch(() => {});
-    }
-  }, [markBillHandled, token]);
-
-  const handleLongPressBill = useCallback((item: Bill) => {
-    Alert.alert(
-      item.title,
-      'What would you like to do?',
-      [
-        {
-          text: 'Mark Handled',
-          onPress: () => handleMarkHandled(item.id),
-        },
-        {
-          text: 'Delete Bill',
-          style: 'destructive',
-          onPress: () => {
-            deleteBill(item.id);
-            if (token) {
-              billsService.delete(item.id).catch(() => {});
-            }
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    );
-  }, [handleMarkHandled, deleteBill, token]);
-
-  // Analytics summary values
-  const now = new Date();
-  const thisMonthTotal = useMemo(
-    () => expenses
-      .filter(e => {
-        const d = new Date(e.date);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      })
-      .reduce((s, e) => s + e.amount, 0),
-    [expenses], // eslint-disable-line react-hooks/exhaustive-deps
-  );
-  const lastMonthTotal = useMemo(
-    () => expenses
-      .filter(e => {
-        const d = new Date(e.date);
-        const lm = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
-        const ly = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-        return d.getMonth() === lm && d.getFullYear() === ly;
-      })
-      .reduce((s, e) => s + e.amount, 0),
-    [expenses], // eslint-disable-line react-hooks/exhaustive-deps
-  );
-
-  const pendingBills = useMemo(
-    () => [...bills.filter(b => b.status === 'overdue'), ...bills.filter(b => b.status === 'pending')],
-    [bills],
-  );
+  // Analytics summary values — use dashboard API for accuracy (group + non-group)
+  const thisMonthTotal = dashboard?.summary?.thisMonthTotal
+    ? fromMinorUnits(dashboard.summary.thisMonthTotal)
+    : 0;
+  const lastMonthTotal = dashboard?.summary?.lastMonthTotal
+    ? fromMinorUnits(dashboard.summary.lastMonthTotal)
+    : 0;
 
   const filteredActivities = useMemo(() => {
     switch (activeFilter) {
-      case 'expenses': return activities.filter(a => a.action.includes('Expense'));
-      case 'payments': return activities.filter(a => a.action.includes('Handled'));
-      default:         return activities;
+      case 'expenses':
+        return apiActivities.filter(a => a.action.includes('Expense') && !a.action.includes('Settlement'));
+      case 'settlements':
+        return apiActivities.filter(a => a.action.includes('Settlement'));
+      default:
+        return apiActivities;
     }
-  }, [activities, activeFilter]);
+  }, [apiActivities, activeFilter]);
 
   const FILTERS: { value: Filter; label: string }[] = [
-    { value: 'all',       label: 'All' },
-    { value: 'expenses',  label: 'Expenses' },
-    { value: 'bills',     label: 'Bills' },
-    { value: 'reminders', label: `Reminders${pendingBills.length > 0 ? ` (${pendingBills.length})` : ''}` },
-    { value: 'payments',  label: 'Payments' },
+    { value: 'all',         label: 'All' },
+    { value: 'expenses',    label: 'Expenses' },
+    { value: 'settlements', label: 'Settlements' },
   ];
 
-  const renderActivityItem = ({ item }: { item: { id: string; action: string; detail: string; timestamp: string; amount?: number; currency?: string } }) => {
+  const renderActivityItem = ({ item }: { item: Activity }) => {
     const icon = getActivityIcon(item.action);
     const iconColor = getActivityColor(item.action, isDark);
     const isExpense = item.action.includes('Expense');
-    const isBill = item.action.includes('Bill');
 
-    // Live fallback: lookup amount from expenses/bills if activity was stripped by API
-    let itemAmount = item.amount;
-    let itemCurrency = item.currency;
-    if (typeof itemAmount !== 'number' && isExpense) {
-      const match = expenses.find(e => e.notes === item.detail || e.id === item.detail);
-      if (match) { itemAmount = match.amount; itemCurrency = match.currency; }
-    }
-    if (typeof itemAmount !== 'number' && isBill) {
-      const match = bills.find(b => b.title === item.detail || b.id === item.detail);
-      if (match) { itemAmount = match.amount; itemCurrency = match.currency; }
-    }
+    const itemAmount = item.amount;
+    const itemCurrency = item.currency;
 
     const hasAmount = typeof itemAmount === 'number';
     const amtSymbol = itemCurrency ? (CURRENCY_SYMBOLS[itemCurrency] ?? itemCurrency) : (CURRENCY_SYMBOLS[currency] ?? currency);
@@ -221,8 +117,11 @@ export default function ActivityScreen({ navigation }: any) {
           </View>
         )}
         onPress={() => {
-          if (isExpense) navigation.navigate('GroupsTab', { screen: 'GroupDetail', params: { groupId: 'direct' } });
-          else if (isBill) navigation.navigate('HomeTab', { screen: 'BillDetail', params: { billId: item.id } });
+          if (item.expenseId) {
+            navigation.navigate('AddExpense', { expenseId: item.expenseId });
+          } else if (item.groupId) {
+            navigation.navigate('GroupsTab', { screen: 'GroupDetail', params: { groupId: item.groupId } });
+          }
         }}
         style={{ backgroundColor: theme.background }}
         titleStyle={{ color: theme.text }}
@@ -288,161 +187,43 @@ export default function ActivityScreen({ navigation }: any) {
 
       {/* ── Content area ── */}
       <View style={{ flex: 1 }}>
-        {/* Activity feed (All / Expenses / Payments) */}
-        {activeFilter !== 'bills' && activeFilter !== 'reminders' && (
-          <FlatList
-            data={filteredActivities}
-            keyExtractor={item => item.id}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} colors={[theme.primary]} />}
-            ItemSeparatorComponent={() => null}
-            contentContainerStyle={{ flexGrow: 1 }}
-            ListEmptyComponent={
-              <EmptyState
-                icon="clock-outline"
-                title={
-                  activeFilter === 'expenses'
-                    ? 'No expenses logged yet.'
-                    : activeFilter === 'payments'
-                    ? 'No payments recorded yet.'
-                    : 'No activity yet.'
-                }
-                subtitle={
-                  activeFilter === 'expenses'
-                    ? 'Add one using the + button.'
-                    : activeFilter === 'payments'
-                    ? undefined
-                    : 'Actions will appear here automatically.'
-                }
-              />
-            }
-            renderItem={renderActivityItem}
-          />
-        )}
-
-        {/* Bills */}
-        {activeFilter === 'bills' && (
-          <FlatList
-            data={bills}
-            keyExtractor={item => item.id}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} colors={[theme.primary]} />}
-            ItemSeparatorComponent={() => <Divider />}
-            contentContainerStyle={{ flexGrow: 1 }}
-            ListEmptyComponent={
-              <EmptyState
-                icon="receipt-text-outline"
-                title="No bills yet."
-                subtitle="Tap + to add your first bill. Bills have moved here — they're now part of the Activity feed."
-              />
-            }
-            renderItem={({ item }: { item: Bill }) => {
-              const cfg = {
-                pending: { color: theme.warning, icon: 'clock-outline' },
-                overdue: { color: theme.error, icon: 'alert-circle-outline' },
-                handled: { color: theme.success, icon: 'check-circle-outline' },
-              }[item.status];
-              return (
-                <List.Item
-                  title={item.title}
-                  description={`Due: ${new Date(item.dueDate).toLocaleDateString()} · ${item.category}${item.isRecurring ? ' · Recurring' : ''}`}
-                  left={props => <List.Icon {...props} icon="receipt-text-outline" color={theme.primary} />}
-                  right={() => (
-                    <View style={styles.billRight}>
-                      <Text variant="titleSmall" style={{ color: theme.text }}>
-                        {formatAmount(item.amount, currency)}
-                      </Text>
-                      <Chip
-                        compact
-                        mode="outlined"
-                        icon={cfg.icon}
-                        textStyle={{ color: cfg.color }}
-                        style={{ borderColor: cfg.color }}
-                      >
-                        {item.status}
-                      </Chip>
-                    </View>
-                  )}
-                  onPress={() => navigation.navigate('HomeTab', { screen: 'BillDetail', params: { billId: item.id } })}
-                  onLongPress={() => handleLongPressBill(item)}
-                  style={{ backgroundColor: theme.background }}
-                  titleStyle={{ color: theme.text }}
-                  descriptionStyle={{ color: theme.textSecondary }}
-                />
-              );
-            }}
-          />
-        )}
-
-        {/* Reminders */}
-        {activeFilter === 'reminders' && (
-          <FlatList
-            data={pendingBills}
-            keyExtractor={item => item.id}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} colors={[theme.primary]} />}
-            ItemSeparatorComponent={() => <Divider />}
-            contentContainerStyle={{ flexGrow: 1 }}
-            ListEmptyComponent={
-              <EmptyState
-                icon="bell-check-outline"
-                title="All clear! No pending reminders."
-                subtitle="Reminders have moved here from the old Reminders tab. Overdue and pending bills appear in this filter."
-              />
-            }
-            renderItem={({ item }: { item: Bill }) => {
-              const overdue = item.status === 'overdue';
-              const chipColor = overdue ? theme.error : theme.warning;
-              return (
-                <List.Item
-                  title={item.title}
-                  description={`Due: ${new Date(item.dueDate).toLocaleDateString()} · ${formatAmount(item.amount, currency)}`}
-                  left={props => (
-                    <List.Icon
-                      {...props}
-                      icon={overdue ? 'bell-alert' : 'bell-outline'}
-                      color={chipColor}
-                    />
-                  )}
-                  right={() => (
-                    <View style={styles.reminderRight}>
-                      <Chip
-                        compact
-                        mode="outlined"
-                        icon={overdue ? 'alert-circle-outline' : 'clock-outline'}
-                        textStyle={{ color: chipColor }}
-                        style={{ borderColor: chipColor }}
-                      >
-                        {overdue ? 'overdue' : 'pending'}
-                      </Chip>
-                      <Button
-                        mode="text"
-                        compact
-                        icon="check"
-                        textColor={theme.primary}
-                        onPress={() => handleMarkHandled(item.id)}
-                      >
-                        Done
-                      </Button>
-                    </View>
-                  )}
-                  onPress={() => navigation.navigate('HomeTab', { screen: 'BillDetail', params: { billId: item.id } })}
-                  onLongPress={() => handleLongPressBill(item)}
-                  style={{ backgroundColor: theme.background }}
-                  titleStyle={{ color: theme.text }}
-                  descriptionStyle={{ color: theme.textSecondary }}
-                />
-              );
-            }}
-          />
-        )}
+        <FlatList
+          data={filteredActivities}
+          keyExtractor={item => item.id}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} colors={[theme.primary]} />}
+          ItemSeparatorComponent={() => null}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 120 + insets.bottom }}
+          ListEmptyComponent={
+            <EmptyState
+              icon="clock-outline"
+              title={
+                activeFilter === 'expenses'
+                  ? 'No expenses logged yet.'
+                  : activeFilter === 'settlements'
+                  ? 'No settlements recorded yet.'
+                  : 'No activity yet.'
+              }
+              subtitle={
+                activeFilter === 'expenses'
+                  ? 'Add one using the + button.'
+                  : activeFilter === 'settlements'
+                  ? undefined
+                  : 'Actions will appear here automatically.'
+              }
+            />
+          }
+          renderItem={renderActivityItem}
+        />
       </View>
 
       {/* FAB — Add Expense is the primary quick action from this screen */}
       <FAB
         icon="plus"
-        style={[styles.fab, { backgroundColor: theme.primary, bottom: Math.max(24, insets.bottom + 8) }]}
+        style={[styles.fab, { backgroundColor: theme.primary, bottom: insets.bottom + CLASSIC_TAB_BAR_FLOAT_OFFSET }]}
         color="#FFF"
-        onPress={() => navigation.navigate(activeFilter === 'bills' ? 'AddBillModal' : 'AddExpenseModal')}
-        label={activeFilter === 'bills' ? 'Add Bill' : 'Add Expense'}
-        accessibilityLabel={activeFilter === 'bills' ? 'Add bill' : 'Add expense'}
+        onPress={() => navigation.navigate('AddExpense')}
+        label="Add Expense"
+        accessibilityLabel="Add expense"
       />
     </View>
   );
@@ -451,30 +232,31 @@ export default function ActivityScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   analyticsBanner: {
-    marginHorizontal: 12,
-    marginTop: 10,
-    borderRadius: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 16,
     borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.15)',
     overflow: 'hidden',
   },
   analyticsInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
-  analyticsTile: { flex: 1, gap: 2 },
-  analyticsDivider: { width: 1, height: 32, marginHorizontal: 12 },
-  analyticsBtn: { marginLeft: 8 },
-  chipBar: { height: 52, justifyContent: 'center' },
-  chipRow: { paddingHorizontal: 12, gap: 8, alignItems: 'center' },
-  chip: { height: 34 },
+  analyticsTile: { flex: 1, gap: 4 },
+  analyticsDivider: { width: 1, height: 36, marginHorizontal: 16 },
+  analyticsBtn: { marginLeft: 12 },
+  chipBar: { height: 56, justifyContent: 'center' },
+  chipRow: { paddingHorizontal: 16, gap: 10, alignItems: 'center' },
+  chip: { height: 36 },
 
   // Activity row
   activityIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 2,

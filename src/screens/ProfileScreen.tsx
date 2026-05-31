@@ -18,13 +18,14 @@ import {
   IconButton,
 } from 'react-native-paper';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { useAppTheme } from '../context/ThemeContext';
+import { useAppTheme, useTheme } from '../context/ThemeContext';
 import { useStore } from '../store/useStore';
 import { authService } from '../services/authService';
 import CountryCodePicker from '../components/CountryCodePicker';
 import { Country, COUNTRIES, DEFAULT_COUNTRY } from '../utils/countries';
 import AppAvatar from '../components/AppAvatar';
 import { haptics } from '../utils/haptics';
+import { colors as staticColors, spacing, radius, shadows } from '../theme/tokens';
 
 // Phone-only accounts get a placeholder email like phone_91xxx@fincoord.internal
 const isPlaceholderEmail = (email?: string) =>
@@ -52,6 +53,7 @@ function parseStoredPhone(phone?: string): { country: Country; localNumber: stri
 }
 
 export default function ProfileScreen({ navigation }: any) {
+  const { colors } = useTheme();
   const { theme } = useAppTheme();
   const currentUser = useStore(state => state.currentUser);
   const updateCurrentUser = useStore(state => state.updateCurrentUser);

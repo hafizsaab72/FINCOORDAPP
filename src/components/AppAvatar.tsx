@@ -1,6 +1,6 @@
 import React from 'react';
 import { Image, StyleSheet, View } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { avatarColor, getInitials } from '../utils/ui';
 
 interface AppAvatarProps {
@@ -14,7 +14,6 @@ export default function AppAvatar({
   size = 48,
   variant = 'circle',
 }: AppAvatarProps) {
-  const theme = useTheme();
   const id = user._id || user.name;
   const borderRadius = variant === 'circle' ? size / 2 : size * 0.25;
 
@@ -26,7 +25,7 @@ export default function AppAvatar({
           width: size,
           height: size,
           borderRadius,
-          backgroundColor: theme.colors.surfaceVariant,
+          backgroundColor: '#3D2D5C',
         }}
         resizeMode="cover"
       />
@@ -49,7 +48,7 @@ export default function AppAvatar({
       ]}>
       <Text
         style={{
-          color: '#FFF',
+          color: '#FFFFFF',
           fontWeight: '700',
           fontSize: size * 0.4,
         }}>

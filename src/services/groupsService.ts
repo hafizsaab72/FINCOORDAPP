@@ -15,23 +15,12 @@ export interface ApiGroup {
   createdBy: { _id: string; name: string; email: string };
   createdAt: string;
   type?: string;
+  icon?: string;
   image?: string;
   startDate?: string;
   endDate?: string;
   simplifyDebts?: boolean;
   myBalance?: GroupMyBalance;
-}
-
-export interface ApiExpenseItem {
-  _id: string;
-  groupId: string;
-  payerId: string;
-  amount: number;
-  currency: string;
-  notes: string;
-  date: string;
-  splitMethod: string;
-  splitDetails: Record<string, number>;
 }
 
 /** Map an API group response to the local store Group shape */
@@ -42,24 +31,37 @@ export const apiGroupToGroup = (g: ApiGroup): Group => ({
   createdBy: g.createdBy?._id ?? '',
   createdAt: g.createdAt,
   type: g.type as Group['type'],
+  icon: g.icon,
   image: g.image,
   startDate: g.startDate,
   endDate: g.endDate,
   simplifyDebts: g.simplifyDebts,
 });
 
-export interface GroupUpdatePatch {
-  name?: string;
+export interface GroupCreatePayload {
+  name: string;
+  memberIds?: string[];
   type?: string;
+  icon?: string;
   image?: string;
   startDate?: string;
   endDate?: string;
   simplifyDebts?: boolean;
 }
 
+export interface GroupUpdatePatch {
+  name?: string;
+  type?: string;
+  icon?: string;
+  image?: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  simplifyDebts?: boolean;
+}
+
 export const groupsService = {
-  create: (name: string, memberIds: string[] = []) =>
-    apiFetch<{ group: ApiGroup }>('/groups', 'POST', { name, memberIds }),
+  create: (payload: GroupCreatePayload) =>
+    apiFetch<{ group: ApiGroup }>('/groups', 'POST', payload),
 
   getAll: () =>
     apiFetch<{ groups: ApiGroup[] }>('/groups'),
@@ -70,16 +72,11 @@ export const groupsService = {
   getBalances: (groupId: string) =>
     apiFetch<GroupBalancesData>(`/groups/${groupId}/balances`),
 
-  getExpenses: (groupId: string, limit = 30, skip = 0) =>
-    apiFetch<{ expenses: ApiExpenseItem[]; total: number; hasMore: boolean }>(
-      `/groups/${groupId}/expenses?limit=${limit}&skip=${skip}`,
-    ),
-
   leave: (groupId: string) =>
     apiFetch(`/groups/${groupId}/leave`, 'POST'),
 
-  settle: (groupId: string, payload: { payerId: string; receiverId: string; amount: number; currency?: string }) =>
-    apiFetch<{ expense: ApiExpenseItem }>(`/groups/${groupId}/settle`, 'POST', payload),
+  settle: (groupId: string, payload: { withMemberId: string; amount?: number; paymentMethod?: string; note?: string }) =>
+    apiFetch<{ settled: number; settlementExpenseId: string; message: string }>(`/groups/${groupId}/settle`, 'POST', payload),
 
   update: (groupId: string, patch: GroupUpdatePatch) =>
     apiFetch<{ group: ApiGroup }>(`/groups/${groupId}`, 'PATCH', patch),
@@ -96,12 +93,4 @@ export const groupsService = {
 
   deleteGroup: (groupId: string) =>
     apiFetch(`/groups/${groupId}`, 'DELETE'),
-};
-
-export const expensesService = {
-  update: (expenseId: string, patch: Partial<Pick<ApiExpenseItem, 'amount' | 'notes' | 'currency' | 'splitMethod' | 'splitDetails'>>) =>
-    apiFetch<{ expense: ApiExpenseItem }>(`/expenses/${expenseId}`, 'PATCH', patch),
-
-  delete: (expenseId: string) =>
-    apiFetch(`/expenses/${expenseId}`, 'DELETE'),
 };

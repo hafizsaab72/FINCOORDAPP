@@ -1,20 +1,26 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useLayoutEffect } from 'react';
 import {
   View, StyleSheet, SectionList,
-  ScrollView, StatusBar, Alert, ActionSheetIOS, Platform, TouchableOpacity,
+  ScrollView, StatusBar, Alert, ActionSheetIOS, Platform, TouchableOpacity, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CLASSIC_TAB_BAR_FLOAT_OFFSET } from '../constants/tabBar';
 import {
   Text, Icon, Portal, Modal, Divider,
-  Button, TouchableRipple, Surface, Snackbar, List,
+  Button, TouchableRipple, Surface, Snackbar, List, IconButton, FAB,
 } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
+import { useGroupBalances } from '../hooks/useBalances';
+import { queryClient } from '../../App';
 import { useStore } from '../store/useStore';
-import { useAppTheme } from '../context/ThemeContext';
-import { groupsService, expensesService, ApiGroup, ApiExpenseItem } from '../services/groupsService';
-import { GroupBalancesData } from '../types';
-import { groupColor } from '../constants/groupTypes';
-import { getSymbol } from '../utils/currency';
+import { useAppTheme, useTheme } from '../context/ThemeContext';
+import { groupsService, ApiGroup } from '../services/groupsService';
+import { expensesService } from '../services/expensesService';
+import { Expense, GroupBalancesData } from '../types';
+import { groupColor, getGroupIconConfig } from '../constants/groupTypes';
+import { getSymbol, fromMinorUnits } from '../utils/currency';
+import { colors as staticColors, spacing, radius, shadows, componentTokens } from '../theme/tokens';
+import { apiExpenseToLocal } from '../utils/balances';
 import AppAvatar from '../components/AppAvatar';
 import EmptyState from '../components/EmptyState';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -22,16 +28,16 @@ import { haptics } from '../utils/haptics';
 import { computeBalances } from '../utils/balances';
 
 function getExpenseRole(
-  expense: ApiExpenseItem,
+  expense: Expense,
   myId: string,
 ): { role: 'lent' | 'borrowed' | 'none'; amount: number } {
-  // Multi-payer: sum what I paid minus what I owe
-  const payments = (expense as any).payments ?? [];
-  const splitDetails = expense.splitDetails ?? {};
+  const payments = expense.payers;
+  const splits = expense.splits;
 
-  const myPaid = payments.reduce((s: number, p: any) =>
-    p.userId === myId ? s + (p.amount || 0) : s, 0);
-  const myOwed = splitDetails[myId] || 0;
+  const myPaid = payments.reduce((s, p) =>
+    p.userId === myId ? s + (p.amountPaid || 0) : s, 0);
+  const myOwed = splits.reduce((s, sp) =>
+    sp.userId === myId ? s + (sp.computedAmount || 0) : s, 0);
 
   const diff = myPaid - myOwed;
   if (diff > 0.01) return { role: 'lent', amount: diff };
@@ -39,8 +45,8 @@ function getExpenseRole(
   return { role: 'none', amount: 0 };
 }
 
-function groupByMonth(expenses: ApiExpenseItem[]): { title: string; data: ApiExpenseItem[] }[] {
-  const sections: Record<string, ApiExpenseItem[]> = {};
+function groupByMonth(expenses: Expense[]): { title: string; data: Expense[] }[] {
+  const sections: Record<string, Expense[]> = {};
   for (const e of expenses) {
     const d = new Date(e.date);
     const key = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
@@ -53,7 +59,8 @@ function groupByMonth(expenses: ApiExpenseItem[]): { title: string; data: ApiExp
 
 
 export default function GroupDetailScreen({ route, navigation }: any) {
-  const { groupId, groupName: initialName } = route.params;
+  const { colors } = useTheme();
+  const { groupId, groupName: initialName, groupIcon: initialIcon, groupImage: initialImage } = route.params;
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const currentUser = useStore(state => state.currentUser);
@@ -61,8 +68,9 @@ export default function GroupDetailScreen({ route, navigation }: any) {
   const myId = currentUser?.id ?? '';
 
   const [groupDetail, setGroupDetail] = useState<ApiGroup | null>(null);
-  const [apiBalances, setApiBalances] = useState<GroupBalancesData | null>(null);
-  const [apiExpenses, setApiExpenses] = useState<ApiExpenseItem[]>([]);
+  const [apiExpenses, setApiExpenses] = useState<Expense[]>([]);
+
+  const { data: apiBalances } = useGroupBalances(groupId);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -71,47 +79,58 @@ export default function GroupDetailScreen({ route, navigation }: any) {
   const [balancesModalTab, setBalancesModalTab] = useState<'balances' | 'simplified' | 'totals'>('balances');
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
-  const deleteExpense = useStore(state => state.deleteExpense);
+  const [expenseActionModalVisible, setExpenseActionModalVisible] = useState(false);
+  const [expenseActionModalData, setExpenseActionModalData] = useState<{ expense: Expense; action: 'edit' | 'delete' } | null>(null);
+  const [reminderModalVisible, setReminderModalVisible] = useState(false);
+  const [reminderModalData, setReminderModalData] = useState<{ from: string; fromName: string } | null>(null);
 
   const fetchAll = useCallback(async (isRefresh = false) => {
     if (!currentUser) { setLoading(false); return; }
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
 
-    const [groupRes, balancesRes, expensesRes] = await Promise.allSettled([
+    const [groupRes, expensesRes] = await Promise.allSettled([
       groupsService.getGroup(groupId),
-      groupsService.getBalances(groupId),
-      groupsService.getExpenses(groupId, 30, 0),
+      expensesService.getByGroup(groupId, 30, 0),
     ]);
 
     // Always fetch local expenses for merging
-    const localStoreExpenses = useStore.getState().expenses.filter(e => e.groupId === groupId);
-    const localAsApi: ApiExpenseItem[] = localStoreExpenses.map(e => ({
-      _id: e.id,
-      groupId: e.groupId,
-      payerId: e.payerId,
-      amount: e.amount,
-      currency: e.currency,
-      notes: e.notes,
-      date: e.date,
-      splitMethod: e.splitMethod,
-      splitDetails: e.splitDetails,
-    }));
+    const localStoreExpenses: Expense[] = []; // Local-only expenses removed from store in refactor
 
-    if (groupRes.status === 'fulfilled') setGroupDetail(groupRes.value.group);
+    if (groupRes.status === 'fulfilled') {
+      setGroupDetail(groupRes.value.group);
+    }
 
-    let mergedExpenses: ApiExpenseItem[];
+    // Build a local member map from the group response for name resolution
+    const localMemberMap: Record<string, string> = {};
+    if (groupRes.status === 'fulfilled') {
+      (groupRes.value.group as any).members?.forEach((m: any) => {
+        localMemberMap[m._id] = m.name;
+      });
+    }
+
+    let mergedExpenses: Expense[];
     if (expensesRes.status === 'fulfilled') {
-      const apiExps = expensesRes.value.expenses;
+      const apiExps: Expense[] = expensesRes.value.expenses.map((e: any) => {
+        const local = apiExpenseToLocal(e);
+        // Fill in missing participant names from group member map
+        if (Object.keys(localMemberMap).length > 0) {
+          local.participants = local.participants.map(p => ({
+            ...p,
+            name: p.name || localMemberMap[p.userId] || p.userId,
+          }));
+        }
+        return local;
+      });
       // Merge: API expenses + local expenses not present in API
-      // Deduplicate by amount+notes+date heuristic for unsynced local expenses
-      const apiSet = new Set(apiExps.map(ae => ae._id));
-      const unsyncedLocal = localAsApi.filter(le => {
-        if (apiSet.has(le._id)) return false;
+      // Deduplicate by amount+title+date heuristic for unsynced local expenses
+      const apiSet = new Set(apiExps.map(ae => ae.id));
+      const unsyncedLocal = localStoreExpenses.filter(le => {
+        if (apiSet.has(le.id)) return false;
         // Check if this local expense matches any API expense by content
         return !apiExps.some(ae =>
-          Math.abs(ae.amount - le.amount) < 0.01 &&
-          ae.notes === le.notes &&
+          Math.abs(ae.totalAmount - le.totalAmount) < 0.01 &&
+          ae.title === le.title &&
           Math.abs(new Date(ae.date).getTime() - new Date(le.date).getTime()) < 2000,
         );
       });
@@ -119,15 +138,9 @@ export default function GroupDetailScreen({ route, navigation }: any) {
       setApiExpenses(mergedExpenses);
       setHasMore(expensesRes.value.hasMore ?? false);
     } else {
-      mergedExpenses = localAsApi;
-      setApiExpenses(localAsApi);
+      mergedExpenses = localStoreExpenses;
+      setApiExpenses(localStoreExpenses);
       setHasMore(false);
-    }
-
-    if (balancesRes.status === 'fulfilled') {
-      setApiBalances(balancesRes.value);
-    } else {
-      setApiBalances(null);
     }
 
     setLoading(false);
@@ -138,9 +151,12 @@ export default function GroupDetailScreen({ route, navigation }: any) {
     if (!hasMore || loadingMore) return;
     setLoadingMore(true);
     try {
-      const res = await groupsService.getExpenses(groupId, 30, apiExpenses.length);
-      setApiExpenses(prev => [...prev, ...res.expenses]);
+      const res = await expensesService.getByGroup(groupId, 30, apiExpenses.length);
+      const newExpenses = res.expenses.map(apiExpenseToLocal);
+      setApiExpenses(prev => [...prev, ...newExpenses]);
       setHasMore(res.hasMore ?? false);
+      // Refresh balances to reflect newly loaded expenses
+      queryClient.invalidateQueries({ queryKey: ['balances', groupId] });
     } catch { /* ignore */ }
     finally { setLoadingMore(false); }
   }, [hasMore, loadingMore, groupId, apiExpenses.length]);
@@ -150,26 +166,52 @@ export default function GroupDetailScreen({ route, navigation }: any) {
   const memberMap = useMemo(() => {
     const map: Record<string, string> = {};
     groupDetail?.members.forEach(m => { map[m._id] = m.name; });
+    // Also resolve names from expenses (for removed members who still appear in old expenses)
+    apiExpenses.forEach(e => {
+      e.payers?.forEach(p => {
+        if (!map[p.userId] && p.userId === currentUser?.id) map[p.userId] = currentUser?.name ?? 'You';
+      });
+      e.splits?.forEach(s => {
+        if (!map[s.userId] && s.userId === currentUser?.id) map[s.userId] = currentUser?.name ?? 'You';
+      });
+    });
+    // Include former member names from API balances if available
+    apiBalances?.memberBalances?.forEach(mb => {
+      if (!map[mb.memberId]) map[mb.memberId] = mb.name;
+    });
     return map;
-  }, [groupDetail]);
+  }, [groupDetail, apiExpenses, apiBalances, currentUser]);
 
   const balances = useMemo(() => {
+    // Prefer API balances when available (accurate server-side computation)
+    if (apiBalances?.memberBalances?.length) {
+      const myBalance = apiBalances.memberBalances.find(m => m.isMe);
+      const myNet = fromMinorUnits(myBalance?.net ?? 0);
+      return {
+        totalOwedToYou: fromMinorUnits(apiBalances.totalOwedToYou ?? 0),
+        totalYouOwe: fromMinorUnits(apiBalances.totalYouOwe ?? 0),
+        memberBalances: apiBalances.memberBalances.map(m => ({
+          ...m,
+          net: fromMinorUnits(m.net),
+        })),
+      };
+    }
+    // Fallback to client-side computation from expenses
     return computeBalances(
       apiExpenses.map(e => ({
-        payerId: e.payerId,
-        amount: e.amount,
-        splitMethod: e.splitMethod,
-        splitDetails: e.splitDetails,
+        payments: e.payers.map(p => ({ userId: p.userId, amount: p.amountPaid })),
+        splits: e.splits.map(s => ({ userId: s.userId, owedAmount: s.computedAmount })),
+        participantNames: memberMap,
       })),
       myId,
       memberMap,
     );
-  }, [apiExpenses, myId, memberMap]);
+  }, [apiBalances, apiExpenses, myId, memberMap]);
 
   const expenseSections = useMemo(() => groupByMonth(apiExpenses), [apiExpenses]);
 
   const settlementExpenses = useMemo(() => {
-    return apiExpenses.filter(e => e.notes?.toLowerCase().includes('settlement') || e.splitMethod === 'custom' && Object.keys(e.splitDetails ?? {}).length === 1);
+    return apiExpenses.filter(e => e.isSettlement);
   }, [apiExpenses]);
 
   const group = groupDetail;
@@ -181,6 +223,21 @@ export default function GroupDetailScreen({ route, navigation }: any) {
     ? balances.totalOwedToYou - balances.totalYouOwe
     : 0;
 
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerTitle: name,
+      headerRight: () => (
+        <IconButton
+          icon="cog-outline"
+          iconColor={colors.white}
+          size={22}
+          onPress={() => navigation.navigate('GroupSettings', { groupId, groupName: name })}
+          style={{ marginRight: 4 }}
+        />
+      ),
+    });
+  }, [navigation, name, groupId, colors.white]);
+
   if (loading) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.background }]}>
@@ -189,70 +246,61 @@ export default function GroupDetailScreen({ route, navigation }: any) {
     );
   }
 
-  const handleExpensePress = (item: ApiExpenseItem) => {
-    const doEdit = () => navigation.navigate('AddExpenseModal', {
-      groupId,
-      editExpense: {
-        id: item._id,
-        amount: item.amount,
-        notes: item.notes,
-        currency: item.currency,
-        payerId: item.payerId,
-        date: item.date,
-        splitMethod: item.splitMethod,
-        splitDetails: item.splitDetails,
-      },
-    });
+  const handleExpensePress = (item: Expense) => {
+    setExpenseActionModalData({ expense: item, action: 'edit' });
+    setExpenseActionModalVisible(true);
+  };
 
-    const doDelete = () => {
-      Alert.alert(
-        'Delete Expense',
-        `Delete "${item.notes || 'this expense'}" (${getSymbol(item.currency)}${item.amount.toFixed(2)})?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: async () => {
-              deleteExpense(item._id);
-              setApiExpenses(prev => prev.filter(e => e._id !== item._id));
-
-              if (token && currentUser && item._id.match(/^[a-f\d]{24}$/i)) {
-                try {
-                  await expensesService.delete(item._id);
-                } catch {
-                  setSnackbarMessage('Expense deleted locally but could not sync to server.');
-                  setSnackbarVisible(true);
-                  haptics.error();
-                }
-              }
-            },
-          },
-        ],
-      );
-    };
-
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Cancel', 'Edit Expense', 'Delete Expense'], cancelButtonIndex: 0, destructiveButtonIndex: 2 },
-        idx => { if (idx === 1) doEdit(); else if (idx === 2) doDelete(); },
-      );
+  const handleExpenseEdit = () => {
+    if (!expenseActionModalData) return;
+    setExpenseActionModalVisible(false);
+    const parent = navigation.getParent();
+    if (parent) {
+      parent.navigate('AddExpense', { expenseId: expenseActionModalData.expense.id });
     } else {
-      Alert.alert(
-        item.notes || 'Expense',
-        `${getSymbol(item.currency)}${item.amount.toFixed(2)}`,
-        [
-          { text: 'Edit', onPress: doEdit },
-          { text: 'Delete', style: 'destructive', onPress: doDelete },
-          { text: 'Cancel', style: 'cancel' },
-        ],
-      );
+      navigation.navigate('AddExpense', { expenseId: expenseActionModalData.expense.id });
     }
   };
 
-  const renderExpense = ({ item }: { item: ApiExpenseItem }) => {
+  const handleExpenseDelete = async () => {
+    if (!expenseActionModalData) return;
+    try {
+      await expensesService.delete(expenseActionModalData.expense.id);
+      setApiExpenses(prev => prev.filter(e => e.id !== expenseActionModalData!.expense.id));
+      queryClient.invalidateQueries({ queryKey: ['balances', groupId] });
+    } catch {
+      setSnackbarMessage('Could not delete expense. Please check your connection and try again.');
+      setSnackbarVisible(true);
+      haptics.error();
+    }
+    setExpenseActionModalVisible(false);
+  };
+
+  const handleRemindPress = (from: string, fromName: string) => {
+    setReminderModalData({ from, fromName });
+    setReminderModalVisible(true);
+  };
+
+  const handleSendReminder = async () => {
+    if (!reminderModalData) return;
+    try {
+      const { friendsService } = await import('../services/friendsService');
+      await friendsService.remind(reminderModalData.from);
+      setSnackbarMessage(`Reminder sent to ${reminderModalData.fromName}`);
+      setSnackbarVisible(true);
+      haptics.success();
+    } catch {
+      setSnackbarMessage('Make sure you are friends with this user.');
+      setSnackbarVisible(true);
+      haptics.error();
+    }
+    setReminderModalVisible(false);
+  };
+
+  const renderExpense = ({ item }: { item: Expense }) => {
     const { role, amount: roleAmount } = getExpenseRole(item, myId);
-    const payerName = item.payerId === myId ? 'You' : (memberMap[item.payerId] ?? 'Someone');
+    const primaryPayer = item.payers[0];
+    const payerName = primaryPayer?.userId === myId ? 'You' : (memberMap[primaryPayer?.userId ?? ''] ?? 'Someone');
     const expSymbol = getSymbol(item.currency);
     const date = new Date(item.date);
     const day = date.getDate();
@@ -275,17 +323,17 @@ export default function GroupDetailScreen({ route, navigation }: any) {
           </View>
 
           {/* Icon */}
-          <View style={styles.expenseIconBox}>
-            <Icon source="receipt" size={20} color="#666" />
+          <View style={[styles.expenseIconBox, { backgroundColor: colors.surfaceSecondary }]}>
+            <Icon source="receipt" size={20} color={colors.textTertiary} />
           </View>
 
           {/* Title + subtitle */}
           <View style={styles.expenseInfo}>
             <Text style={[styles.expenseTitle, { color: theme.text }]} numberOfLines={1}>
-              {item.notes || 'Expense'}
+              {item.title || 'Expense'}
             </Text>
             <Text style={[styles.expenseSub, { color: theme.textSecondary }]}>
-              {payerName} paid {expSymbol}{item.amount.toFixed(2)}
+              {payerName} paid {expSymbol}{(item.totalAmount ?? 0).toFixed(2)}
             </Text>
           </View>
 
@@ -295,7 +343,7 @@ export default function GroupDetailScreen({ route, navigation }: any) {
               <>
                 <Text style={[styles.roleLabel, { color: theme.success }]}>you lent</Text>
                 <Text style={[styles.roleAmount, { color: theme.success }]}>
-                  {expSymbol}{roleAmount.toFixed(2)}
+                  {expSymbol}{(roleAmount ?? 0).toFixed(2)}
                 </Text>
               </>
             )}
@@ -303,7 +351,7 @@ export default function GroupDetailScreen({ route, navigation }: any) {
               <>
                 <Text style={[styles.roleLabel, { color: theme.warning }]}>you borrowed</Text>
                 <Text style={[styles.roleAmount, { color: theme.warning }]}>
-                  {expSymbol}{roleAmount.toFixed(2)}
+                  {expSymbol}{(roleAmount ?? 0).toFixed(2)}
                 </Text>
               </>
             )}
@@ -327,7 +375,7 @@ export default function GroupDetailScreen({ route, navigation }: any) {
       haptics.success();
       navigation.navigate('SettleUpModal', { groupId, groupName: name, members: balances?.memberBalances ?? [] });
     }},
-    { label: 'Charts', icon: 'chart-bar', filled: false, onPress: () => { haptics.light(); navigation.navigate('Analytics'); }},
+    { label: 'Charts', icon: 'chart-bar', filled: false, onPress: () => { haptics.light(); navigation.navigate('GroupAnalytics', { groupId, groupName: name }); }},
     { label: 'Balances', icon: 'scale-balance', filled: false, onPress: () => { haptics.light(); setBalancesModalTab('balances'); setBalancesModalVisible(true); }},
     { label: 'Simplified', icon: 'lightbulb-on', filled: false, onPress: () => { haptics.light(); setBalancesModalTab('simplified'); setBalancesModalVisible(true); }},
     { label: 'Totals', icon: 'sigma', filled: false, onPress: () => { haptics.light(); setBalancesModalTab('totals'); setBalancesModalVisible(true); }},
@@ -338,46 +386,63 @@ export default function GroupDetailScreen({ route, navigation }: any) {
       <StatusBar barStyle="light-content" />
 
       {/* Full-bleed colored header */}
-      <Surface elevation={2} style={[styles.header, { backgroundColor: headerColor, paddingTop: insets.top + 10 }]}>
+      <Surface elevation={2} style={[styles.header, { backgroundColor: colors.bgHeaderStart, paddingTop: insets.top + spacing[3] }]}>
         <View style={styles.headerTop}>
-          <TouchableOpacity
-            style={styles.headerCircleBtn}
-            onPress={() => {
-              // @ts-ignore popTo available in native-stack v6.7+/v7
-              if (navigation.popTo) {
-                navigation.popTo('Groups');
-              } else {
-                navigation.goBack();
-              }
-            }}
-          >
-            <Icon source="chevron-left" size={24} color="#FFF" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerCircleBtn}
-            onPress={() => navigation.navigate('GroupSettings', { groupId, groupName: name })}
-          >
-            <Icon source="cog-outline" size={22} color="#FFF" />
-          </TouchableOpacity>
+          {(group?.image || initialImage) ? (
+            <Image source={{ uri: group?.image || initialImage }} style={[styles.groupAvatar, { backgroundColor: colors.accentPrimary }]} />
+          ) : (
+            <View style={[styles.groupAvatar, { backgroundColor: colors.accentPrimary, ...shadows.glowPurple }]}>
+              {(group?.icon || initialIcon) ? (
+                <Icon source={getGroupIconConfig(group?.icon || initialIcon).icon} size={32} color={colors.white} />
+              ) : (
+                <Text style={[styles.groupAvatarText, { color: colors.white }]}>
+                  {name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                </Text>
+              )}
+            </View>
+          )}
         </View>
 
-        <Text style={[styles.headerTitle, { color: '#FFF' }]} numberOfLines={1}>
+        <Text style={[styles.headerTitle, { color: colors.white }]} numberOfLines={1}>
           {name}
         </Text>
 
+        {/* Member avatar row */}
+        {groupDetail?.members && groupDetail.members.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.memberAvatarRow}>
+            {groupDetail.members.map((m, i) => (
+              <View
+                key={m._id}
+                style={[
+                  styles.memberAvatarCircle,
+                  { backgroundColor: colors.bgElevated, marginLeft: i > 0 ? -10 : 0, zIndex: groupDetail.members.length - i },
+                ]}
+              >
+                {m.profilePic ? (
+                  <Image source={{ uri: m.profilePic }} style={{ width: 28, height: 28, borderRadius: 14 }} />
+                ) : (
+                  <Text style={{ color: colors.textSecondary, fontSize: 12, fontWeight: '700' }}>
+                    {(m.name?.[0] ?? '?').toUpperCase()}
+                  </Text>
+                )}
+              </View>
+            ))}
+          </ScrollView>
+        )}
+
         <View style={styles.headerMeta}>
           {group?.startDate && (
-            <View style={styles.metaChip}>
-              <Icon source="calendar-range" size={14} color="rgba(255,255,255,0.85)" />
-              <Text style={styles.metaChipText}>
+            <View style={[styles.metaChip, { backgroundColor: colors.bgElevated }]}>
+              <Icon source="calendar-range" size={14} color={colors.textSecondary} />
+              <Text style={[styles.metaChipText, { color: colors.textSecondary }]}>
                 {new Date(group.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 {group.endDate ? ` – ${new Date(group.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
               </Text>
             </View>
           )}
-          <View style={styles.metaChip}>
-            <Icon source="account-multiple-outline" size={14} color="rgba(255,255,255,0.85)" />
-            <Text style={styles.metaChipText}>{group?.members.length ?? 0} people</Text>
+          <View style={[styles.metaChip, { backgroundColor: colors.bgElevated }]}>
+            <Icon source="account-multiple-outline" size={14} color={colors.textSecondary} />
+            <Text style={[styles.metaChipText, { color: colors.textSecondary }]}>{group?.members.length ?? 0} people</Text>
           </View>
         </View>
       </Surface>
@@ -387,11 +452,11 @@ export default function GroupDetailScreen({ route, navigation }: any) {
         sections={[
           {
             title: '__balance',
-            data: [] as ApiExpenseItem[],
+            data: [] as Expense[],
           },
           ...expenseSections,
         ]}
-        keyExtractor={(item, index) => item._id ?? `empty-${index}`}
+        keyExtractor={(item, index) => item.id ?? `empty-${index}`}
         renderItem={({ item, section }) => {
           if (section.title === '__balance') return null;
           return renderExpense({ item });
@@ -420,7 +485,6 @@ export default function GroupDetailScreen({ route, navigation }: any) {
                           {symbol}{Math.abs(m.net).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </Text>
                       </Text>
-                      <Icon source="information-outline" size={16} color={theme.textSecondary} />
                     </View>
                   ))}
 
@@ -436,14 +500,14 @@ export default function GroupDetailScreen({ route, navigation }: any) {
                       style={[
                         styles.actionPill,
                         btn.filled
-                          ? { backgroundColor: '#E8673A', borderColor: '#E8673A' }
-                          : { backgroundColor: theme.background, borderColor: theme.border },
+                          ? { backgroundColor: colors.debt, borderColor: colors.debt }
+                          : { backgroundColor: colors.surfacePrimary, borderColor: colors.borderDefault },
                       ]}
                       onPress={btn.onPress}
                       activeOpacity={0.7}
                     >
-                      <Icon source={btn.icon} size={16} color={btn.filled ? '#FFF' : theme.text} />
-                      <Text style={[styles.actionPillText, { color: btn.filled ? '#FFF' : theme.text }]}>
+                      <Icon source={btn.icon} size={16} color={btn.filled ? colors.white : colors.textPrimary} />
+                      <Text style={[styles.actionPillText, { color: btn.filled ? colors.white : colors.textPrimary }]}>
                         {btn.label}
                       </Text>
                     </TouchableOpacity>
@@ -457,10 +521,10 @@ export default function GroupDetailScreen({ route, navigation }: any) {
                       Settlement history
                     </Text>
                     {settlementExpenses.slice(0, 3).map((e, i) => (
-                      <View key={e._id ?? i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                      <View key={e.id ?? i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                         <Icon source="check-circle-outline" size={14} color={theme.success} />
                         <Text style={{ color: theme.textSecondary, fontSize: 13, marginLeft: 6 }}>
-                          {e.notes || 'Settlement'} — {getSymbol(e.currency)}{e.amount.toFixed(2)}
+                          {e.title || 'Settlement'} — {getSymbol(e.currency)}{e.totalAmount.toFixed(2)}
                         </Text>
                       </View>
                     ))}
@@ -504,7 +568,7 @@ export default function GroupDetailScreen({ route, navigation }: any) {
         }
         refreshing={refreshing}
         onRefresh={() => fetchAll(true)}
-        contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
+        contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}
         stickySectionHeadersEnabled={false}
       />
 
@@ -618,7 +682,7 @@ export default function GroupDetailScreen({ route, navigation }: any) {
                           right={() => (
                             <View style={{ alignItems: 'flex-end', justifyContent: 'center', marginRight: 8 }}>
                               <Text variant="titleMedium" style={{ color: theme.error }}>
-                                {symbol}{tx.amount.toFixed(2)}
+                                {symbol}{fromMinorUnits(tx.amount).toFixed(2)}
                               </Text>
                             </View>
                           )}
@@ -627,27 +691,7 @@ export default function GroupDetailScreen({ route, navigation }: any) {
                           <Button
                             mode="outlined"
                             compact
-                            onPress={() => {
-                              Alert.alert('Remind', `Send a payment reminder to ${tx.fromName}?`, [
-                                { text: 'Cancel', style: 'cancel' },
-                                {
-                                  text: 'Send',
-                                  onPress: async () => {
-                                    try {
-                                      const { friendsService } = await import('../services/friendsService');
-                                      await friendsService.remind(tx.from);
-                                      setSnackbarMessage(`Reminder sent to ${tx.fromName}`);
-                                      setSnackbarVisible(true);
-                                      haptics.success();
-                                    } catch {
-                                      setSnackbarMessage('Could not send reminder. Make sure you are friends with this user.');
-                                      setSnackbarVisible(true);
-                                      haptics.error();
-                                    }
-                                  },
-                                },
-                              ]);
-                            }}
+                            onPress={() => handleRemindPress(tx.from, tx.fromName)}
                           >
                             Remind...
                           </Button>
@@ -683,7 +727,7 @@ export default function GroupDetailScreen({ route, navigation }: any) {
               <View style={{ gap: 10 }}>
                 {[
                   { label: 'Transactions', value: String(apiExpenses.length) },
-                  { label: 'Total spent', value: `${symbol}${apiExpenses.reduce((s, e) => s + e.amount, 0).toFixed(2)}` },
+                  { label: 'Total spent', value: `${symbol}${apiExpenses.reduce((s, e) => s + e.totalAmount, 0).toFixed(2)}` },
                   { label: 'You are owed', value: `${symbol}${(balances?.totalOwedToYou ?? 0).toFixed(2)}` },
                   { label: 'You owe', value: `${symbol}${(balances?.totalYouOwe ?? 0).toFixed(2)}` },
                 ].map(row => (
@@ -706,24 +750,39 @@ export default function GroupDetailScreen({ route, navigation }: any) {
         </Modal>
       </Portal>
 
-      {/* Floating pills */}
-      <View style={[styles.fabContainer, { bottom: Math.max(16, insets.bottom + 8) }]}>
-        <TouchableOpacity
-          style={[styles.fabPill, { backgroundColor: theme.background, borderColor: theme.border }]}
-          onPress={() => navigation.navigate('QRScanner')}
-          activeOpacity={0.7}
-        >
-          <Icon source="camera-outline" size={20} color={theme.text} />
-          <Text style={[styles.fabPillText, { color: theme.text }]}>Scan</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.fabPill, { backgroundColor: theme.primary, borderColor: theme.primary }]}
-          onPress={() => navigation.navigate('AddExpenseModal', { groupId })}
-          activeOpacity={0.7}
-        >
-          <Icon source="receipt" size={20} color="#FFF" />
-          <Text style={[styles.fabPillText, { color: '#FFF' }]}>Add expense</Text>
-        </TouchableOpacity>
+      {/* FABs */}
+      <View style={[styles.fabContainer, { bottom: insets.bottom + CLASSIC_TAB_BAR_FLOAT_OFFSET }]} pointerEvents="box-none">
+        <FAB
+          icon="qrcode-scan"
+          size="small"
+          style={[styles.fabScan, { backgroundColor: theme.surface + 'CC', borderWidth: 1, borderColor: theme.outlineVariant + '60' }]}
+          color={theme.textSecondary}
+          onPress={() => { haptics.medium(); navigation.navigate('QRScanner'); }}
+        />
+        <FAB
+          icon="plus"
+          style={[
+            styles.fabAdd,
+            {
+              backgroundColor: theme.primary,
+              borderRadius: 16,
+              ...Platform.select({
+                ios: { shadowColor: theme.primary, shadowOpacity: 0.4, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+                android: {},
+              }),
+            },
+          ]}
+          color="#FFFFFF"
+          onPress={() => {
+            haptics.medium();
+            const parent = navigation.getParent();
+            if (parent) {
+              parent.navigate('AddExpense', { groupId });
+            } else {
+              navigation.navigate('AddExpense', { groupId });
+            }
+          }}
+        />
       </View>
 
       {/* Snackbar */}
@@ -731,9 +790,108 @@ export default function GroupDetailScreen({ route, navigation }: any) {
         visible={snackbarVisible}
         onDismiss={() => setSnackbarVisible(false)}
         duration={3000}
+        style={{ bottom: insets.bottom + CLASSIC_TAB_BAR_FLOAT_OFFSET }}
       >
         {snackbarMessage}
       </Snackbar>
+
+      {/* Expense Action Modal */}
+      <Portal>
+        <Modal
+          visible={expenseActionModalVisible}
+          onDismiss={() => setExpenseActionModalVisible(false)}
+          contentContainerStyle={[styles.actionModal, { backgroundColor: theme.surface }]}
+        >
+          {expenseActionModalData && (
+            <>
+              <View style={styles.actionModalHeader}>
+                <View style={[styles.actionModalIcon, { backgroundColor: theme.primary + '20' }]}>
+                  <Icon source="receipt" size={24} color={theme.primary} />
+                </View>
+                <View style={styles.actionModalInfo}>
+                  <Text style={[styles.actionModalTitle, { color: theme.text }]}>
+                    {expenseActionModalData.expense.title || 'Expense'}
+                  </Text>
+                  <Text style={[styles.actionModalSubtitle, { color: theme.textSecondary }]}>
+                    {getSymbol(expenseActionModalData.expense.currency)}{fromMinorUnits(expenseActionModalData.expense.totalAmount ?? 0).toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.actionModalButtons}>
+                <Button
+                  mode="outlined"
+                  onPress={handleExpenseEdit}
+                  style={[styles.actionModalBtn, { borderColor: theme.border }]}
+                  labelStyle={{ color: theme.text }}
+                  icon="pencil"
+                >
+                  Edit
+                </Button>
+                <Button
+                  mode="contained"
+                  onPress={handleExpenseDelete}
+                  buttonColor={theme.error}
+                  textColor="#FFFFFF"
+                  style={styles.actionModalBtn}
+                  icon="delete"
+                >
+                  Delete
+                </Button>
+              </View>
+            </>
+          )}
+        </Modal>
+      </Portal>
+
+      {/* Reminder Modal */}
+      <Portal>
+        <Modal
+          visible={reminderModalVisible}
+          onDismiss={() => setReminderModalVisible(false)}
+          contentContainerStyle={[styles.actionModal, { backgroundColor: theme.surface }]}
+        >
+          {reminderModalData && (
+            <>
+              <View style={styles.actionModalHeader}>
+                <View style={[styles.actionModalIcon, { backgroundColor: theme.primary + '20' }]}>
+                  <Icon source="bell" size={24} color={theme.primary} />
+                </View>
+                <View style={styles.actionModalInfo}>
+                  <Text style={[styles.actionModalTitle, { color: theme.text }]}>
+                    Send Reminder
+                  </Text>
+                  <Text style={[styles.actionModalSubtitle, { color: theme.textSecondary }]}>
+                    {reminderModalData.fromName}
+                  </Text>
+                </View>
+              </View>
+              <Text variant="bodyMedium" style={{ color: theme.textSecondary, marginBottom: 8 }}>
+                Send a payment reminder to {reminderModalData.fromName}?
+              </Text>
+              <View style={styles.actionModalButtons}>
+                <Button
+                  mode="outlined"
+                  onPress={() => setReminderModalVisible(false)}
+                  style={[styles.actionModalBtn, { borderColor: theme.border }]}
+                  labelStyle={{ color: theme.text }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  onPress={handleSendReminder}
+                  buttonColor={theme.primary}
+                  textColor="#FFFFFF"
+                  style={styles.actionModalBtn}
+                  icon="send"
+                >
+                  Send
+                </Button>
+              </View>
+            </>
+          )}
+        </Modal>
+      </Portal>
     </View>
   );
 }
@@ -743,114 +901,154 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   // Header
-  header: { paddingBottom: 20 },
+  header: { paddingBottom: spacing[5] },
   headerTop: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingHorizontal: 12, marginBottom: 16,
+    alignItems: 'center',
+    paddingHorizontal: spacing[3], marginBottom: spacing[3],
   },
   headerCircleBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    width: 40, height: 40, borderRadius: radius.full,
+    backgroundColor: staticColors.surfaceHover,
     justifyContent: 'center', alignItems: 'center',
   },
+  groupAvatar: {
+    width: 48, height: 48, borderRadius: radius.full,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  groupAvatarText: { fontSize: 18, fontWeight: '700' },
   headerTitle: {
     fontSize: 32, fontWeight: '700',
-    paddingHorizontal: 20, marginBottom: 12,
+    paddingHorizontal: spacing[5], marginBottom: spacing[3],
   },
-  headerMeta: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, flexWrap: 'wrap' },
+  headerMeta: { flexDirection: 'row', gap: spacing[2], paddingHorizontal: spacing[5], flexWrap: 'wrap' },
   metaChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 20,
-    paddingHorizontal: 12, paddingVertical: 5,
+    flexDirection: 'row', alignItems: 'center', gap: spacing[1],
+    borderRadius: radius.full,
+    paddingHorizontal: spacing[3], paddingVertical: spacing[1],
   },
-  metaChipText: { color: 'rgba(255,255,255,0.9)', fontWeight: '500' },
+  metaChipText: { fontWeight: '500' },
 
   // Balance section
-  balanceSection: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-  balanceOverall: { fontSize: 20, fontWeight: '600', marginBottom: 8 },
+  balanceSection: { paddingHorizontal: spacing[4], paddingTop: spacing[4], paddingBottom: spacing[2] },
+  balanceOverall: { fontSize: 20, fontWeight: '600', marginBottom: spacing[2] },
   memberBalanceRow: {
-    flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 6,
+    flexDirection: 'row', alignItems: 'center', marginTop: spacing[1], gap: spacing[1],
   },
   memberBalanceText: { fontSize: 15 },
   memberBalanceAmount: { fontWeight: '600' },
 
   // Action pills
   actionRow: {
-    flexDirection: 'row', gap: 8,
-    paddingTop: 16, paddingBottom: 8,
+    flexDirection: 'row', gap: spacing[2],
+    paddingTop: spacing[4], paddingBottom: spacing[2],
   },
   actionPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    borderRadius: 20, borderWidth: 1,
-    paddingHorizontal: 14, paddingVertical: 10,
+    flexDirection: 'row', alignItems: 'center', gap: spacing[1],
+    borderRadius: radius.md, borderWidth: 1,
+    paddingHorizontal: spacing[2], paddingVertical: spacing[1],
   },
-  actionPillText: { fontSize: 14, fontWeight: '600' },
+  actionPillText: { fontSize: 13, fontWeight: '600' },
 
   // Expense list
   expenseRow: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 12, gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: spacing[5], paddingVertical: spacing[4], gap: spacing[3],
+    borderRadius: radius.lg,
+    marginHorizontal: spacing[4],
+    marginBottom: spacing[2],
   },
-  dateCol: { width: 36, alignItems: 'center' },
-  dateMonth: { fontSize: 12, textTransform: 'uppercase', fontWeight: '600' },
-  dateDay: { fontSize: 16, fontWeight: '500', lineHeight: 20 },
+  dateCol: { width: 40, alignItems: 'center' },
+  dateMonth: { fontSize: 11, textTransform: 'uppercase', fontWeight: '600', letterSpacing: 0.05 },
+  dateDay: { fontSize: 18, fontWeight: '600', lineHeight: 22 },
   expenseIconBox: {
-    width: 40, height: 40, borderRadius: 10,
-    backgroundColor: '#F0F0F0',
+    width: 44, height: 44, borderRadius: radius.lg,
     justifyContent: 'center', alignItems: 'center',
   },
   expenseInfo: { flex: 1 },
-  expenseTitle: { fontSize: 16, fontWeight: '500' },
-  expenseSub: { fontSize: 13, marginTop: 2 },
+  expenseTitle: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
+  expenseSub: { fontSize: 13 },
   expenseRight: { alignItems: 'flex-end', minWidth: 90 },
-  roleLabel: { fontSize: 12, fontWeight: '500' },
-  roleAmount: { fontSize: 15, fontWeight: '700' },
+  roleLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.05, marginBottom: 2 },
+  roleAmount: { fontSize: 16, fontWeight: '700' },
 
-  sectionHeader: { paddingHorizontal: 16, paddingVertical: 10 },
-  sectionHeaderText: { fontSize: 16, fontWeight: '700' },
+  sectionHeader: { paddingHorizontal: spacing[5], paddingVertical: spacing[3] },
+  sectionHeaderText: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.08 },
 
   // Floating pills
   fabContainer: {
-    position: 'absolute', right: 16,
-    flexDirection: 'row', alignItems: 'center', gap: 10,
+    position: 'absolute', right: spacing[4],
+    flexDirection: 'row', alignItems: 'center', gap: spacing[2],
   },
   fabPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderRadius: 24, borderWidth: 1,
-    paddingHorizontal: 16, paddingVertical: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    flexDirection: 'row', alignItems: 'center', gap: spacing[2],
+    borderRadius: radius.full, borderWidth: 1,
+    paddingHorizontal: spacing[4], paddingVertical: spacing[3],
+    shadowColor: staticColors.black, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15, shadowRadius: 4, elevation: 4,
   },
   fabPillText: { fontSize: 15, fontWeight: '600' },
 
   // Load more
   loadMoreBtn: {
-    margin: 16, borderRadius: 12, borderWidth: 1,
-    paddingVertical: 12, alignItems: 'center',
+    margin: spacing[4], borderRadius: radius.lg, borderWidth: 1,
+    paddingVertical: spacing[3], alignItems: 'center',
   },
   loadMoreText: { fontWeight: '600', fontSize: 14 },
 
   // Balances modal
   balModal: {
-    marginHorizontal: 16, borderRadius: 16, padding: 20,
+    marginHorizontal: spacing[4], borderRadius: radius.xl, padding: spacing[5],
   },
   balModalTabs: {
     flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth,
-    marginBottom: 16,
+    marginBottom: spacing[3],
   },
   balModalTab: {
-    flex: 1, paddingVertical: 10, alignItems: 'center',
+    flex: 1, paddingVertical: spacing[2], alignItems: 'center',
     borderBottomWidth: 2,
   },
   simplifyBanner: {
     flexDirection: 'row', alignItems: 'center',
-    padding: 12, borderRadius: 10, marginTop: 8,
+    padding: spacing[3], borderRadius: radius.lg, marginTop: spacing[2],
   },
   balModalClose: {
-    marginTop: 20, borderRadius: 12,
+    marginTop: spacing[5], borderRadius: radius.lg,
   },
   totalsRow: {
-    flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8,
+    flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing[2],
   },
+
+  // Member avatar row in header
+  memberAvatarRow: {
+    flexDirection: 'row',
+    marginTop: spacing[3],
+    marginBottom: spacing[1],
+    paddingHorizontal: spacing[4],
+  },
+  memberAvatarCircle: {
+    width: 32, height: 32, borderRadius: 16,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 2,
+    borderColor: staticColors.white,
+  },
+
+  // Expense action modal
+  actionModal: {
+    marginHorizontal: 32, borderRadius: 20, padding: 24,
+  },
+  actionModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 8,
+  },
+  actionModalIcon: {
+    width: 52, height: 52, borderRadius: 14,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  actionModalInfo: { flex: 1 },
+  actionModalTitle: { fontWeight: '700', fontSize: 18 },
+  actionModalSubtitle: { marginTop: 2, opacity: 0.7 },
+  actionModalButtons: { flexDirection: 'row', gap: 12, marginTop: 20 },
+  actionModalBtn: { flex: 1, borderRadius: 12 },
 });

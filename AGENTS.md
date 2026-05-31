@@ -1,6 +1,6 @@
-# FinCoordApp — Agent Guide
+# OnTheTab — Agent Guide
 
-FinCoordApp is a React Native mobile application for shared expense management, bill tracking, and friend-based financial coordination. It is the client for the companion **FinCoordAPI** backend (Express + MongoDB Atlas).
+OnTheTab is a React Native mobile application for shared expense management and friend-based financial coordination. It is the client for the companion **FinCoordAPI** backend (Express + MongoDB Atlas).
 
 ## Technology Stack
 
@@ -23,25 +23,28 @@ FinCoordApp is a React Native mobile application for shared expense management, 
 
 ```
 src/
-├── components/     Reusable UI: Card, SearchBar, SummaryTile, StatusChip, SplitSelector,
-│                   CountryCodePicker (flag + dial code + searchable sheet), ProGate
+├── components/     Reusable UI: AppCard, AppSearchBar, SummaryTile, StatusChip,
+│                   ParticipantSelector, PayerSelector, SplitConfigurator, CategoryPicker,
+│                   CurrencySelector, DatePickerField, ExpenseSummaryBar, CountryCodePicker,
+│                   ProGate, RemainingIndicator, EmptyState, LoadingOverlay
 ├── constants/      paperTheme.ts, theme.ts (custom tokens), config.ts (API base URL),
 │                   groupTypes.ts
 ├── context/        ThemeContext — useAppTheme(), toggleTheme()
 ├── navigation/     RootNavigator (auth stack + modals + screens), AppNavigator (bottom tabs)
 ├── screens/        All screen and modal components (see list below)
 ├── services/       api.ts, authService.ts, currencyService.ts, notificationService.ts,
-│                   friendsService.ts, groupsService.ts, activitiesService.ts, billsService.ts
+│                   friendsService.ts, groupsService.ts, activitiesService.ts, expensesService.ts
 ├── store/          useStore.ts — Zustand store with balance hooks
 ├── types/          index.ts — central type definitions
-└── utils/          countries.ts, exportData.ts, notifications.ts, currency.ts, validation.ts
+└── utils/          countries.ts, exportData.ts, notifications.ts, currency.ts, validation.ts,
+│                   splitCalculations.ts, expenseValidation.ts, balances.ts
 ```
 
 **Screens (selection):**
-- Auth: `WelcomeScreen`, `SignInScreen`, `SignUpScreen`
+- Auth: `WelcomeScreen`, `SignInScreen`, `SignUpScreen`, `ForgotPasswordScreen`, `ResetPasswordScreen`
 - Main: `HomeScreen`, `FriendsScreen`, `GroupsScreen`, `GroupDetailScreen`, `ActivityScreen`, `SettingsScreen`, `ProfileScreen`
-- Bills: `BillsScreen`, `BillDetailScreen`, `RemindersScreen`
-- Modals: `AddExpenseModal`, `AddBillModal`, `CreateGroupModal`, `SettleUpModal`
+- Modals: `CreateGroupModal`, `SettleUpModal`
+- Expense: `AddExpenseScreen` (full-screen Splitwise-style form)
 - Pro / Tools: `AnalyticsScreen`, `SearchScreen`, `UpgradeScreen`
 - QR / Invite: `QRScannerScreen`, `MyQRCodeScreen`, `InviteScreen`
 
@@ -80,11 +83,12 @@ npm test                 # jest
 The API base URL lives in `src/constants/config.ts`:
 
 ```ts
-const USE_REMOTE = true;   // toggle false for local dev
 const REMOTE_URL = 'http://187.124.96.129/api';
-const LOCAL_URL = `http://${Platform.OS === 'android' ? '10.0.2.2' : 'localhost'}:3000/api`;
-export const API_URL = USE_REMOTE ? REMOTE_URL : LOCAL_URL;
+const LOCAL_URL = `http://${Platform.OS === 'android' ? '10.0.2.2' : 'localhost'}:3050/api`;
+export const API_URL = __DEV__ ? LOCAL_URL : REMOTE_URL;
 ```
+
+`__DEV__` is a React Native global: `true` when the JS bundle is served by Metro (development), `false` in release builds (production).
 
 All HTTP calls go through `src/services/api.ts` (`apiFetch`), which:
 - Reads the JWT `token` from Zustand state
@@ -95,11 +99,11 @@ All HTTP calls go through `src/services/api.ts` (`apiFetch`), which:
 
 `src/store/useStore.ts` is a single Zustand store persisted to AsyncStorage under key `fin-coord-storage`.
 
-**Persisted fields:** `expenses`, `bills`, `groups`, `activities`, `isGuest`, `currency`, `currentUser`, `token`, `isPro`, `splitTemplates`, `exchangeRates`, `ratesLastFetched`.
+**Persisted fields:** `expenses`, `groups`, `activities`, `isGuest`, `currency`, `currentUser`, `token`, `isPro`.
 
 **Key behaviors:**
 - `_hasHydrated` flag blocks rendering until rehydration completes (checked in `App.tsx`).
-- `setAuth` clears local data (`expenses`, `bills`, `groups`, etc.) when switching to a different user.
+- `setAuth` clears local data (`expenses`, `groups`, etc.) when switching to a different user.
 - `signOut` wipes auth and all local data.
 - `useBalances(groupId)` is a derived selector that calculates net balances per member for a group.
 
@@ -107,14 +111,15 @@ All HTTP calls go through `src/services/api.ts` (`apiFetch`), which:
 
 1. **Email + Password:** `authService.register` / `authService.login` → store JWT + user in Zustand.
 2. **Phone OTP:** Firebase Phone Auth verifies the number → exchange Firebase `idToken` with backend via `authService.phoneLogin` → store JWT + user.
-3. **Guest Mode:** `setGuestStatus(true)` bypasses auth; data is local-only.
-4. **Session persistence:** On app launch (`App.tsx`), if a token exists, `authService.me()` re-fetches the profile. On failure, the user is signed out silently.
-5. **Phone → Email upgrade:** Phone-only users can add an email/password from `ProfileScreen`.
+3. **Forgot Password:** `authService.forgotPassword(email)` generates a secure token (SHA-256 hashed, 1-hour expiry) → user enters token + new password via `authService.resetPassword(token, newPassword)`.
+5. **Guest Mode:** `setGuestStatus(true)` bypasses auth; data is local-only.
+6. **Session persistence:** On app launch (`App.tsx`), if a token exists, `authService.me()` re-fetches the profile. On failure, the user is signed out silently.
+7. **Phone → Email upgrade:** Phone-only users can add an email/password from `ProfileScreen`.
 
 ## Push Notifications
 
 - **Library:** `@react-native-firebase/messaging` + `@notifee/react-native`.
-- **Channel:** `fincoord-default` (created in `notificationService.ts`).
+- **Channel:** `onthetab-default` (created in `notificationService.ts`).
 - **Registration:** FCM device token is posted to `/users/device-token` on login.
 - **Handlers:**
   - Foreground: `setupForegroundHandler()` (called in `App.tsx` mount).
@@ -159,13 +164,16 @@ Configured in `App.tsx` via `NavigationContainer` `linking` prop.
 ## Testing
 
 - **Framework:** Jest with `react-native` preset.
-- **Current coverage:** Minimal. Only `__tests__/App.test.tsx` exists, using `react-test-renderer` to shallow-render `<App />`.
-- There are no unit tests for services, store logic, or components.
+- **Current coverage:** 96 tests across 4 suites.
+  - `__tests__/App.test.tsx` — shallow-render `<App />`
+  - `src/utils/__tests__/splitCalculations.test.ts` — 38 tests for all 5 split methods + finance invariants
+  - `src/utils/__tests__/expenseValidation.test.ts` — 29 tests for spec validation rules
+  - `src/utils/__tests__/balances.test.ts` — 28 tests for balance computation, debt simplification, and who-owes-who
 
 ## Security and Privacy Considerations
 
 - **JWT storage:** Tokens are stored in Zustand and persisted to AsyncStorage (unencrypted). This is standard for React Native but not hardened.
-- **Firebase config files:** `android/app/google-services.json` and `ios/FinCoordApp/GoogleService-Info.plist` are required for Phone Auth and Push but are **gitignored**.
+- **Firebase config files:** `android/app/google-services.json` and `ios/OnTheTab/GoogleService-Info.plist` are required for Phone Auth and Push but are **gitignored**.
 - **Remote server:** The production API points to a hard-coded IP address (`187.124.96.129`) over plain HTTP.
 - **Profile pictures:** Stored as base64 data URLs in MongoDB (not in a separate blob store).
 - **Guest data:** Guest-mode data never leaves the device; it is local-only.
@@ -181,6 +189,29 @@ Configured in `App.tsx` via `NavigationContainer` `linking` prop.
 | `react-native-contacts` | Requires contacts permission. |
 | `react-native-image-picker` | Requires photo/camera permissions. |
 | `react-native-vector-icons` | Linked via `fonts.gradle` on Android; fonts must be included in iOS build. |
+
+## Assets
+
+The app has no bundled JS image assets. All logos and icons are generated directly into native platform directories:
+
+- **iOS AppIcon:** `ios/OnTheTab/Images.xcassets/AppIcon.appiconset/` (13 sizes, 20×20 to 1024×1024)
+- **iOS Splash Logo:** `ios/OnTheTab/Images.xcassets/SplashLogo.imageset/` (wordmark for LaunchScreen)
+- **Android Launcher Icons:** `android/app/src/main/res/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png` + `ic_launcher_round.png`
+
+The wordmark source is `high-resolution-color-logo-2.png` (mint "Onthetab" text on transparent) composited onto black `#080808`.
+
+## Android Splash Screen
+
+On Android 12+ (API 31+), the OS enforces a **system splash screen** using the adaptive icon. The app extends this splash via `MainActivity.kt`:
+- `SplashTheme` (`launch_background.xml`) shows the branded icon on a black background
+- `splashScreen.setOnExitAnimationListener` delays dismissal by **1.5 seconds**, giving React Native time to fully render before the splash is removed
+- `AppTheme` `windowBackground` is set to `#0A0A0A` to match the welcome screen's dark gradient, preventing any visible flash
+
+**Key files:**
+- `android/app/src/main/res/values/styles.xml` — `SplashTheme` + `AppTheme`
+- `android/app/src/main/res/drawable/launch_background.xml` — black bg + centered icon
+- `android/app/src/main/java/com/onthetab/MainActivity.kt` — `setOnExitAnimationListener` delay
+- `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` — adaptive icon definition
 
 ## Deployment Notes
 

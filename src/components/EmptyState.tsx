@@ -14,26 +14,27 @@ export default function EmptyState({ icon, title, subtitle, action }: EmptyState
 
   return (
     <View style={styles.container}>
-      <Icon source={icon} size={48} color={theme.colors.outline} />
+      <View style={[styles.iconContainer, { backgroundColor: theme.colors.surfaceVariant }]}>
+        <Icon source={icon} size={40} color={theme.colors.primary} />
+      </View>
       <Text
-        variant="bodyLarge"
-        style={[styles.title, { color: theme.colors.onSurfaceVariant }]}>
+        variant="titleMedium"
+        style={[styles.title, { color: theme.colors.onSurface }]}>
         {title}
       </Text>
       {subtitle && (
         <Text
-          variant="bodySmall"
+          variant="bodyMedium"
           style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}>
           {subtitle}
         </Text>
       )}
       {action && (
         <Button
-          mode="text"
+          mode="contained"
           onPress={action.onPress}
           icon={action.icon}
-          textColor={theme.colors.primary}
-          style={{ marginTop: 8 }}>
+          style={styles.button}>
           {action.label}
         </Button>
       )}
@@ -47,13 +48,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 48,
-    gap: 12,
+    gap: 16,
+  },
+  iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   title: {
     textAlign: 'center',
+    fontWeight: '600',
   },
   subtitle: {
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 20,
+    maxWidth: 280,
+  },
+  button: {
+    marginTop: 8,
+    borderRadius: 10,
   },
 });

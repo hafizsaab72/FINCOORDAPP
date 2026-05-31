@@ -8,6 +8,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { colors as staticColors } from '../theme/tokens';
 import {
   Text,
   Surface,
@@ -18,7 +19,7 @@ import {
 } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
 import { useStore } from '../store/useStore';
-import { useAppTheme } from '../context/ThemeContext';
+import { useAppTheme, useTheme } from '../context/ThemeContext';
 import { haptics } from '../utils/haptics';
 
 const QR_SCHEME = 'fincoord://add-friend?userId=';
@@ -32,6 +33,7 @@ export const normalizeCode = (raw: string) =>
   raw.replace(/-/g, '').toLowerCase().trim();
 
 export default function MyQRCodeScreen({ navigation }: any) {
+  const { colors } = useTheme();
   const { theme } = useAppTheme();
   const currentUser = useStore(state => state.currentUser);
   const [snackVisible, setSnackVisible] = useState(false);
@@ -68,8 +70,8 @@ export default function MyQRCodeScreen({ navigation }: any) {
   const shareCode = () => {
     haptics.medium();
     Share.share({
-      message: `Add me on FinCoord! My friend code: ${friendCode}\nOr open: ${qrValue}`,
-      title: 'My FinCoord Friend Code',
+      message: `Add me on OnTheTab! My friend code: ${friendCode}\nOr open: ${qrValue}`,
+      title: 'My OnTheTab Friend Code',
     });
   };
 
@@ -119,7 +121,7 @@ export default function MyQRCodeScreen({ navigation }: any) {
                 styles.avatarFallback,
                 { backgroundColor: theme.primary },
               ]}>
-              <Text variant="headlineMedium" style={{ color: '#FFF' }}>
+              <Text variant="headlineMedium" style={{ color: colors.white }}>
                 {(currentUser.name?.[0] ?? '?').toUpperCase()}
               </Text>
             </View>
@@ -135,7 +137,7 @@ export default function MyQRCodeScreen({ navigation }: any) {
           elevation={2}>
           <Text
             variant="titleLarge"
-            style={[styles.name, { color: '#FFF' }]}>
+            style={[styles.name, { color: colors.white }]}>
             {currentUser.name}
           </Text>
 
@@ -146,8 +148,8 @@ export default function MyQRCodeScreen({ navigation }: any) {
             <QRCode
               value={qrValue}
               size={200}
-              color="#1E1E1E"
-              backgroundColor="#FFFFFF"
+              color={colors.surfaceSecondary}
+              backgroundColor={colors.white}
               logo={undefined}
               ecl="M"
             />
@@ -186,7 +188,7 @@ export default function MyQRCodeScreen({ navigation }: any) {
         <Text
           variant="bodySmall"
           style={[styles.disclaimer, { color: theme.textSecondary }]}>
-          Anyone can use your code to add you on FinCoord. Only share it with people you trust.
+          Anyone can use your code to add you on OnTheTab. Only share it with people you trust.
         </Text>
       </ScrollView>
 
@@ -225,7 +227,7 @@ const styles = StyleSheet.create({
     height: 72,
     borderRadius: 36,
     borderWidth: 4,
-    borderColor: '#FFFFFF',
+    borderColor: staticColors.white,
   },
   avatarFallback: {
     justifyContent: 'center',
@@ -246,7 +248,7 @@ const styles = StyleSheet.create({
   qrWrap: {
     padding: 16,
     borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: staticColors.white,
     alignItems: 'center',
     justifyContent: 'center',
   },

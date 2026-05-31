@@ -1,6 +1,6 @@
 import { Share, Alert, Platform } from 'react-native';
 import RNFS from 'react-native-fs';
-import { Expense, Bill } from '../types';
+import { Expense } from '../types';
 
 function escapeCsv(value: string | number): string {
   const s = String(value);
@@ -10,10 +10,10 @@ function escapeCsv(value: string | number): string {
   return s;
 }
 
-export async function exportDataToCSV(expenses: Expense[], bills: Bill[]) {
+export async function exportDataToCSV(expenses: Expense[]) {
   try {
     const rows: string[] = [
-      'Type,Date,Description,Amount,Currency,Category,Group,SplitMethod,Status',
+      'Type,Date,Title,Amount,Currency,Category,Group,SplitMethod',
     ];
 
     for (const e of expenses) {
@@ -21,35 +21,18 @@ export async function exportDataToCSV(expenses: Expense[], bills: Bill[]) {
         [
           'Expense',
           escapeCsv(new Date(e.date).toLocaleDateString()),
-          escapeCsv(e.notes || ''),
-          escapeCsv(e.amount.toFixed(2)),
+          escapeCsv(e.title || ''),
+          escapeCsv((e.totalAmount ?? 0).toFixed(2)),
           escapeCsv(e.currency || ''),
-          '',
-          escapeCsv(e.groupId),
+          escapeCsv(e.category || ''),
+          escapeCsv(e.groupId || ''),
           escapeCsv(e.splitMethod),
-          '',
-        ].join(','),
-      );
-    }
-
-    for (const b of bills) {
-      rows.push(
-        [
-          'Bill',
-          escapeCsv(new Date(b.dueDate).toLocaleDateString()),
-          escapeCsv(b.title),
-          escapeCsv(b.amount.toFixed(2)),
-          escapeCsv(b.currency || ''),
-          escapeCsv(b.category),
-          '',
-          '',
-          escapeCsv(b.status),
         ].join(','),
       );
     }
 
     const csv = rows.join('\n');
-    const fileName = `fincoord_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    const fileName = `onthetab_export_${new Date().toISOString().slice(0, 10)}.csv`;
     const path = `${RNFS.TemporaryDirectoryPath}/${fileName}`;
 
     await RNFS.writeFile(path, csv, 'utf8');
@@ -57,8 +40,8 @@ export async function exportDataToCSV(expenses: Expense[], bills: Bill[]) {
     const fileUrl = Platform.OS === 'android' ? `file://${path}` : path;
 
     await Share.share({
-      title: 'FinCoord Export',
-      message: 'Here is your FinCoord data export.',
+      title: 'OnTheTab Export',
+      message: 'Here is your OnTheTab data export.',
       url: fileUrl,
     });
   } catch (err: any) {

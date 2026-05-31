@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View, StyleSheet, ScrollView, Alert,
   KeyboardAvoidingView, Platform,
@@ -11,8 +11,11 @@ import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { groupsService } from '../services/groupsService';
+import { friendsService } from '../services/friendsService';
 import { haptics } from '../utils/haptics';
-import { MemberBalance } from '../types';
+import { Activity, MemberBalance } from '../types';
+import { queryClient } from '../../App';
+import { fromMinorUnits } from '../utils/currency';
 
 // ─── helpers ───────────────────────────────────────────────────
 const AVATAR_COLORS = ['#E57373', '#F06292', '#BA68C8', '#9575CD', '#7986CB', '#4FC3F7', '#4DB6AC'];
@@ -38,7 +41,6 @@ export default function SettleUpModal({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
   const currentUser = useStore(s => s.currentUser);
   const homeCurrency = useStore(s => s.currency);
-  const addExpense = useStore(s => s.addExpense);
 
   const myId = currentUser?.id ?? '';
   const myName = currentUser?.name ?? 'You';
@@ -50,13 +52,22 @@ export default function SettleUpModal({ navigation, route }: any) {
 
   // Step 2: amount entry
   const [amount, setAmount] = useState('');
-  const [note, setNote] = useState('Settlement payment');
+  const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const allMembers: MemberBalance[] = [
-    { memberId: myId, name: myName, email: currentUser?.email ?? '', isMe: true, net: 0 },
-    ...members.filter((m: MemberBalance) => m.memberId !== myId),
-  ];
+  // members from API are already in major units, but guard against minor-unit data
+  const allMembers: MemberBalance[] = useMemo(() => {
+    const others = members
+      .filter((m: MemberBalance) => m.memberId !== myId)
+      .map((m: MemberBalance) => ({
+        ...m,
+        net: Math.abs(m.net) > 10000 ? fromMinorUnits(m.net) : m.net,
+      }));
+    return [
+      { memberId: myId, name: myName, email: currentUser?.email ?? '', isMe: true, net: 0 },
+      ...others,
+    ];
+  }, [members, myId, myName, currentUser]);
 
   const settleableMembers = allMembers.filter((m: MemberBalance) => {
     if (m.memberId === myId) return false;
@@ -87,45 +98,38 @@ export default function SettleUpModal({ navigation, route }: any) {
     const member = selectedMember;
     if (!member) return;
 
-    const payerId = member.net > 0 ? member.memberId : myId;
-    const receiverId = member.net > 0 ? myId : member.memberId;
-
-    // Confirmation modal
+    const direction = member.net > 0 ? `${member.name} pays you` : `You pay ${member.name}`;
     Alert.alert(
       'Confirm settlement',
-      `${member.net > 0 ? `${member.name} pays you` : 'You pay'} ${currency} ${numAmount.toFixed(2)}?`,
+      `${direction} ${currency} ${numAmount.toFixed(2)}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Confirm',
+          text: 'Record',
           onPress: async () => {
             setSaving(true);
             try {
-              addExpense({
-                id: `settle-${Date.now()}`,
-                groupId,
-                amount: numAmount,
-                currency,
-                payerId,
-                splitMethod: 'custom',
-                splitDetails: { [receiverId]: numAmount },
-                date: new Date().toISOString(),
-                notes: note.trim() || 'Settlement',
-                participantNames: Object.fromEntries(
-                  allMembers.map((m: MemberBalance) => [m.memberId, m.name]),
-                ),
-              });
+              let res: any;
 
-              if (groupId?.match(/^[a-f\d]{24}$/i)) {
-                await groupsService.settle(groupId, { payerId, receiverId, amount: numAmount, currency });
+              if (groupId === 'direct') {
+                res = await friendsService.settle(member.memberId, {
+                  amount: numAmount,
+                  note: note.trim() || 'Settlement',
+                });
+              } else {
+                res = await groupsService.settle(groupId, {
+                  withMemberId: member.memberId,
+                  amount: numAmount,
+                  note: note.trim() || 'Settlement',
+                });
               }
 
               haptics.success();
-              Alert.alert('Settlement recorded', 'The payment has been recorded successfully.');
+              await queryClient.invalidateQueries();
+              Alert.alert('Settlement recorded', res?.message || 'The payment has been recorded successfully.');
               navigation.goBack();
-            } catch {
-              Alert.alert('Sync Warning', 'Saved locally but could not sync to server.');
-              navigation.goBack();
+            } catch (e: any) {
+              Alert.alert('Error', e.message || 'Could not record settlement. Please check your connection and try again.');
             } finally {
               setSaving(false);
             }

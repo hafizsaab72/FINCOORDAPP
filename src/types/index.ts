@@ -1,41 +1,76 @@
-export type SplitMethod = 'equal' | 'percentage' | 'custom' | 'shares' | 'adjustment';
-export type SplitType = 'equal' | 'unequal' | 'percentage' | 'shares' | 'itemized';
+export type ContextType = 'group' | 'non_group';
+export type PayerMode = 'single' | 'multiple';
+export type SplitMethod = 'equal' | 'exact' | 'percentage' | 'shares' | 'adjustment';
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'fortnightly' | 'monthly' | 'yearly';
 
-// ── New multi-payer schema types ──────────────────────────────
-
-export interface Payment {
+export interface Participant {
   userId: string;
-  amount: number; // major units in UI, converted to minor for API
-  currency?: string; // original currency (defaults to expense baseCurrency)
+  name: string;
+  isActive: boolean;
 }
 
-export interface SplitEntry {
+export interface Payer {
   userId: string;
-  owedAmount: number; // major units in UI, converted to minor for API
-  shareType?: SplitMethod;
-  shareValue?: number;
-  isExcluded?: boolean;
+  amountPaid: number; // major units in UI
 }
 
-/** New multi-payer expense shape (matches backend schema) */
-export interface ExpenseV2 {
+export interface Split {
+  userId: string;
+  splitMethod: SplitMethod;
+  value: number;
+  computedAmount: number; // major units in UI
+}
+
+export interface RecurrenceRule {
+  frequency: RecurrenceFrequency;
+  startDate: string;
+  endDate?: string;
+}
+
+export interface Attachment {
+  url: string;
+  filename: string;
+  uploadedAt: string;
+}
+
+export interface Expense {
   id: string;
-  groupId: string;
-  description: string;
-  totalAmount: number; // in minor units from API; use fromMinorUnits() for display
-  baseCurrency: string;
-  payments: Payment[];
-  splits: SplitEntry[];
-  splitType: SplitType;
-  expenseDate: string;
-  notes?: string;
-  category?: string;
-  receiptUrl?: string;
-  isSettlement?: boolean;
-  createdBy?: string;
+  title: string;
+  totalAmount: number; // major units in UI, minor in API
+  currency: string;
+  category: string;
+  contextType: ContextType;
+  groupId: string | null;
+  participants: Participant[];
+  payerMode: PayerMode;
+  payers: Payer[];
+  splitMethod: SplitMethod;
+  splits: Split[];
+  date: string; // ISO date
+  notes: string | null;
+  attachments: Attachment[] | null;
+  isRecurring: boolean;
+  recurrenceRule: RecurrenceRule | null;
+  isSettlement: boolean;
+  settlementFrom?: string;
+  settlementTo?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  isDeleted?: boolean;
 }
 
-// ── Legacy single-payer types (keep for backward compat) ──────
+export interface Activity {
+  id: string;
+  action: string;
+  detail: string;
+  timestamp: string;
+  expenseId?: string;
+  groupId?: string;
+  amount?: number;
+  currency?: string;
+  metadata?: Record<string, unknown>;
+}
 
 export interface User {
   id: string;
@@ -57,6 +92,7 @@ export interface Group {
   createdBy?: string;
   createdAt: string;
   type?: 'trip' | 'home' | 'couple' | 'other';
+  icon?: string;
   image?: string;
   startDate?: string;
   endDate?: string;
@@ -70,6 +106,7 @@ export interface MemberBalance {
   profilePic?: string;
   isMe: boolean;
   net: number;
+  isFormerMember?: boolean;
 }
 
 export interface SimplifiedTransaction {
@@ -87,27 +124,14 @@ export interface GroupBalancesData {
   simplifiedTransactions?: SimplifiedTransaction[];
 }
 
-/** Legacy single-payer expense (keep during transition) */
-export interface Expense {
-  id: string;
-  groupId: string;
-  payerId: string;
-  amount: number;
-  currency: string;
-  notes: string;
-  date: string;
-  splitMethod: SplitMethod;
-  splitDetails: Record<string, number>;
-  participantNames?: Record<string, string>; // id → display name, for local direct expenses
-}
-
-// ── Dashboard types ─────────────────────────────────────────
-
 export interface DashboardSummary {
   totalOwedToMe: number; // minor units
   totalIOwe: number;     // minor units
   netBalance: number;    // minor units (positive = owed to me)
   currency: string;
+  expenseCount?: number;
+  thisMonthTotal?: number; // minor units
+  lastMonthTotal?: number; // minor units
 }
 
 export interface DashboardByGroup {
@@ -137,33 +161,6 @@ export interface DashboardBalances {
   simplifiedTransactions: SimplifiedTransaction[];
 }
 
-export interface Bill {
-  id: string;
-  title: string;
-  amount: number;
-  currency?: string;
-  dueDate: string;
-  isRecurring: boolean;
-  status: 'pending' | 'handled' | 'overdue';
-  category: string;
-}
-
-export interface ActivityEntry {
-  id: string;
-  action: string;
-  detail: string;
-  timestamp: string;
-  amount?: number;
-  currency?: string;
-}
-
-export interface LocalUser {
-  id: string;
-  name: string;
-  email: string;
-  password: string;
-}
-
 export interface CurrentUser {
   id: string;
   name: string;
@@ -174,10 +171,4 @@ export interface CurrentUser {
   profilePic?: string; // base64 data URL stored in MongoDB
   currency?: string;
   isPro?: boolean;
-}
-
-export interface SplitTemplate {
-  groupId: string;
-  method: SplitMethod;
-  details: Record<string, number>; // percentages or custom amounts
 }

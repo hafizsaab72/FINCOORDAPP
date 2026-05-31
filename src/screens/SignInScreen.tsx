@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { TextInput, Button, Text, HelperText, SegmentedButtons, Icon } from 'react-native-paper';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Image, Alert } from 'react-native';
+import { TextInput, Button, Text, HelperText, SegmentedButtons } from 'react-native-paper';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { useAppTheme } from '../context/ThemeContext';
+import { Images } from '../constants/images';
 import { useStore } from '../store/useStore';
 import { authService } from '../services/authService';
 import CountryCodePicker from '../components/CountryCodePicker';
@@ -30,7 +31,7 @@ export default function SignInScreen({ navigation }: any) {
   const [otp, setOtp] = useState('');
   const [phoneStep, setPhoneStep] = useState<PhoneStep>('number');
   const confirmationRef = useRef<FirebaseAuthTypes.ConfirmationResult | null>(null);
-  const cooldownRef = useRef<NodeJS.Timeout | null>(null);
+  const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -109,6 +110,10 @@ export default function SignInScreen({ navigation }: any) {
       setError('Enter the OTP sent to your phone');
       return;
     }
+    performVerifyOtp();
+  };
+
+  const performVerifyOtp = async () => {
     haptics.medium();
     setLoading(true);
     setError('');
@@ -140,14 +145,16 @@ export default function SignInScreen({ navigation }: any) {
     >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <View style={[styles.logoCircle, { backgroundColor: theme.primary }]}>
-            <Icon source="bank-transfer" size={32} color="#FFF" />
-          </View>
+          <Image
+            source={Images.logos.primary}
+            style={styles.logo}
+            resizeMode="contain"
+          />
           <Text variant="headlineMedium" style={[styles.title, { color: theme.text }]}>
             Welcome back
           </Text>
           <Text variant="bodyMedium" style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Sign in to your FinCoord account
+            Sign in to your OnTheTab account
           </Text>
         </View>
 
@@ -198,6 +205,18 @@ export default function SignInScreen({ navigation }: any) {
             {passwordError && <HelperText type="error" visible>Password must be at least 6 characters.</HelperText>}
 
             {!!error && <HelperText type="error" visible style={styles.serverError}>{error}</HelperText>}
+
+            <View style={styles.forgotRow}>
+              <Button
+                mode="text"
+                compact
+                textColor={theme.primary}
+                onPress={() => navigation.navigate('ForgotPassword')}
+                style={styles.forgotBtn}
+              >
+                Forgot Password?
+              </Button>
+            </View>
 
             <Button
               mode="contained"
@@ -307,9 +326,11 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { flexGrow: 1, padding: 24 },
   header: { alignItems: 'center', gap: 10, paddingVertical: 32 },
-  logoCircle: {
-    width: 72, height: 72, borderRadius: 36,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 8,
+  logo: {
+    width: 160,
+    height: 60,
+    marginBottom: 8,
+    resizeMode: 'contain',
   },
   title: { fontWeight: '700' },
   subtitle: { textAlign: 'center' },
@@ -320,5 +341,7 @@ const styles = StyleSheet.create({
   serverError: { marginBottom: 8 },
   btn: { marginTop: 12, borderRadius: 10 },
   btnContent: { paddingVertical: 6 },
+  forgotRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4, marginBottom: 8 },
+  forgotBtn: { marginRight: -8 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 16 },
 });

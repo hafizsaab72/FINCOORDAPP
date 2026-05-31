@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, TextInput, Chip, Divider, List, Icon, SegmentedButtons, TouchableRipple, Surface } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useStore } from '../store/useStore';
@@ -7,11 +8,8 @@ import { useAppTheme } from '../context/ThemeContext';
 import { formatAmount } from '../utils/currency';
 import { haptics } from '../utils/haptics';
 import AppSearchBar from '../components/AppSearchBar';
-import { Expense, Bill } from '../types';
-
-type ResultItem =
-  | { kind: 'expense'; data: Expense }
-  | { kind: 'bill'; data: Bill };
+import { expensesService } from '../services/expensesService';
+import { Expense } from '../types';
 
 type SortKey = 'newest' | 'oldest' | 'highest';
 
@@ -20,8 +18,7 @@ const CATEGORIES = ['All', 'Food', 'Travel', 'Utilities', 'Rent', 'Entertainment
 export default function SearchScreen() {
   const { theme } = useAppTheme();
   const navigation = useNavigation<any>();
-  const expenses = useStore(state => state.expenses);
-  const bills = useStore(state => state.bills);
+  const insets = useSafeAreaInsets();
   const currency = useStore(state => state.currency);
 
   const [query, setQuery] = useState('');
@@ -29,101 +26,61 @@ export default function SearchScreen() {
   const [filterCategory, setFilterCategory] = useState('All');
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
+  const [apiExpenses, setApiExpenses] = useState<Expense[]>([]);
 
-  const results: ResultItem[] = useMemo(() => {
+  useEffect(() => {
+    expensesService.getAll(100)
+      .then(res => {
+        if (res?.expenses) setApiExpenses(res.expenses);
+      })
+      .catch(() => {});
+  }, []);
+
+  const results: Expense[] = useMemo(() => {
     const q = query.toLowerCase().trim();
     const min = minAmount ? parseFloat(minAmount) : -Infinity;
     const max = maxAmount ? parseFloat(maxAmount) : Infinity;
 
-    const expenseResults: ResultItem[] = expenses
+    return apiExpenses
       .filter(e => {
-        if (q && !e.notes?.toLowerCase().includes(q)) return false;
-        if (e.amount < min || e.amount > max) return false;
+        if (q && !e.title?.toLowerCase().includes(q) && !e.notes?.toLowerCase().includes(q)) return false;
+        if (e.totalAmount < min || e.totalAmount > max) return false;
+        if (filterCategory !== 'All' && e.category !== filterCategory) return false;
         return true;
       })
-      .map(e => ({ kind: 'expense' as const, data: e }));
-
-    const billResults: ResultItem[] = bills
-      .filter(b => {
-        if (q && !b.title.toLowerCase().includes(q)) return false;
-        if (filterCategory !== 'All' && b.category !== filterCategory) return false;
-        if (b.amount < min || b.amount > max) return false;
-        return true;
-      })
-      .map(b => ({ kind: 'bill' as const, data: b }));
-
-    const combined = [...expenseResults, ...billResults];
-
-    return combined.sort((a, b) => {
-      const dateA = a.kind === 'expense' ? a.data.date : a.data.dueDate;
-      const dateB = b.kind === 'expense' ? b.data.date : b.data.dueDate;
-      const amtA = a.data.amount;
-      const amtB = b.data.amount;
-
-      if (sortKey === 'newest') return new Date(dateB).getTime() - new Date(dateA).getTime();
-      if (sortKey === 'oldest') return new Date(dateA).getTime() - new Date(dateB).getTime();
-      return amtB - amtA;
-    });
-  }, [query, expenses, bills, sortKey, filterCategory, minAmount, maxAmount]);
+      .sort((a, b) => {
+        if (sortKey === 'newest') return new Date(b.date).getTime() - new Date(a.date).getTime();
+        if (sortKey === 'oldest') return new Date(a.date).getTime() - new Date(b.date).getTime();
+        return b.totalAmount - a.totalAmount;
+      });
+  }, [query, apiExpenses, sortKey, filterCategory, minAmount, maxAmount]);
 
   const handlePressExpense = (expense: Expense) => {
     haptics.light();
-    if (expense.groupId && expense.groupId !== 'direct') {
+    if (expense.groupId) {
       navigation.navigate('GroupsTab', { screen: 'GroupDetail', params: { groupId: expense.groupId, groupName: '' } });
+    } else {
+      navigation.navigate('AddExpense', { expenseId: expense.id });
     }
   };
 
-  const handlePressBill = (bill: Bill) => {
-    haptics.light();
-    navigation.navigate('HomeTab', { screen: 'BillDetail', params: { billId: bill.id } });
-  };
-
-  const renderItem = ({ item }: { item: ResultItem }) => {
-    if (item.kind === 'expense') {
-      const e = item.data;
-      return (
-        <Surface elevation={1} style={[styles.card, { backgroundColor: theme.surface }]}>
-          <TouchableRipple
-            onPress={() => handlePressExpense(e)}
-            rippleColor="rgba(0,0,0,0.06)"
-          >
-            <List.Item
-              title={e.notes || 'Expense'}
-              description={`${new Date(e.date).toLocaleDateString()} · ${e.splitMethod} split`}
-              left={props => <List.Icon {...props} icon="cash-multiple" color={theme.primary} />}
-              right={() => (
-                <View style={styles.rightCol}>
-                  <Text variant="titleSmall" style={{ color: theme.text }}>
-                    {formatAmount(e.amount, currency)}
-                  </Text>
-                  <Text variant="bodySmall" style={{ color: theme.textSecondary }}>expense</Text>
-                </View>
-              )}
-              titleStyle={{ color: theme.text }}
-              descriptionStyle={{ color: theme.textSecondary }}
-            />
-          </TouchableRipple>
-        </Surface>
-      );
-    }
-
-    const b = item.data;
+  const renderItem = ({ item }: { item: Expense }) => {
     return (
       <Surface elevation={1} style={[styles.card, { backgroundColor: theme.surface }]}>
         <TouchableRipple
-          onPress={() => handlePressBill(b)}
+          onPress={() => handlePressExpense(item)}
           rippleColor="rgba(0,0,0,0.06)"
         >
           <List.Item
-            title={b.title}
-            description={`Due ${new Date(b.dueDate).toLocaleDateString()} · ${b.category}`}
-            left={props => <List.Icon {...props} icon="receipt-text" color={theme.primary} />}
+            title={item.title || 'Expense'}
+            description={`${new Date(item.date).toLocaleDateString()} · ${item.splitMethod} split`}
+            left={props => <List.Icon {...props} icon="cash-multiple" color={theme.primary} />}
             right={() => (
               <View style={styles.rightCol}>
                 <Text variant="titleSmall" style={{ color: theme.text }}>
-                  {formatAmount(b.amount, currency)}
+                  {formatAmount(item.totalAmount, currency)}
                 </Text>
-                <Text variant="bodySmall" style={{ color: theme.textSecondary }}>bill</Text>
+                <Text variant="bodySmall" style={{ color: theme.textSecondary }}>expense</Text>
               </View>
             )}
             titleStyle={{ color: theme.text }}
@@ -138,7 +95,7 @@ export default function SearchScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.searchRow}>
         <AppSearchBar
-          placeholder="Search expenses and bills..."
+          placeholder="Search expenses..."
           value={query}
           onChangeText={setQuery}
         />
@@ -166,7 +123,7 @@ export default function SearchScreen() {
         />
       </View>
 
-      {/* Category filter (for bills) */}
+      {/* Category filter */}
       <View style={styles.categoryRow}>
         <FlatList
           horizontal
@@ -207,18 +164,17 @@ export default function SearchScreen() {
 
       <FlatList
         data={results}
-        keyExtractor={(item, idx) =>
-          item.kind === 'expense' ? item.data.id : `bill-${item.data.id}-${idx}`
-        }
+        keyExtractor={item => item.id}
         ItemSeparatorComponent={() => <Divider style={{ marginVertical: 4 }} />}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Icon source="text-search" size={48} color={theme.border} />
             <Text variant="bodyMedium" style={{ color: theme.textSecondary, marginTop: 12 }}>
-              {query ? 'No matches found' : 'Type to search your expenses and bills'}
+              {query ? 'No matches found' : 'Type to search your expenses'}
             </Text>
           </View>
         }
+        contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}
         renderItem={renderItem}
       />
     </View>

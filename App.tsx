@@ -1,8 +1,9 @@
 /** @format */
 
-import React, { useEffect, useState } from 'react';
+import 'react-native-url-polyfill/auto';
+import React, { useEffect, useRef, useState } from 'react';
 import { StatusBar, useColorScheme, Text } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { navigationRef } from './src/navigation/navigationRef';
 import { Provider as PaperProvider, Surface, Text as PaperText, ActivityIndicator } from 'react-native-paper';
@@ -16,10 +17,10 @@ import { registerDeviceToken, setupForegroundHandler } from './src/services/noti
 import { fetchExchangeRates } from './src/services/currencyService';
 import ErrorBoundary from './src/components/ErrorBoundary';
 
-// Force Manrope on all plain React Native Text components as a fallback
-(Text as any).defaultProps = { ...(Text as any).defaultProps, style: { fontFamily: 'Manrope' } };
+// Force Lato on all plain React Native Text components as a fallback
+(Text as any).defaultProps = { ...(Text as any).defaultProps, style: { fontFamily: 'Lato' } };
 
-const queryClient = new QueryClient({
+export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5, // 5 minutes
@@ -36,14 +37,23 @@ function AppContent() {
   const signOut = useStore(state => state.signOut);
   const hasHydrated = useStore(state => state._hasHydrated);
   const [authChecking, setAuthChecking] = useState(true);
+  const lastTokenRef = useRef<string | null>(null);
 
-  // On every app launch, if a token exists re-fetch the user profile
-  // to sync any server-side changes (currency, name, profilePic, etc.)
+  // Whenever the auth token changes (launch, sign-in, token refresh), validate
+  // the session. Transactional data is fetched per-screen; nothing is cached locally.
   useEffect(() => {
     if (!token) {
       setAuthChecking(false);
       return;
     }
+
+    // Prevent duplicate fetch for the same token within this session.
+    if (lastTokenRef.current === token) {
+      setAuthChecking(false);
+      return;
+    }
+    lastTokenRef.current = token;
+
     authService.me()
       .then(user => {
         updateCurrentUser(user);
@@ -51,7 +61,6 @@ function AppContent() {
       })
       .catch(err => {
         // Only sign out on confirmed 401 Unauthorized.
-        // Network errors should NOT wipe local data.
         if (err?.message?.includes('401') || err?.message?.includes('Unauthorized')) {
           signOut();
         }
@@ -63,7 +72,8 @@ function AppContent() {
 
     // Fetch exchange rates on launch (with 24h TTL handled internally)
     fetchExchangeRates().catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   // Wire foreground notification handler
   useEffect(() => {
@@ -88,34 +98,43 @@ function AppContent() {
       <Surface
         style={{
           flex: 1,
-          backgroundColor: theme.background,
+          backgroundColor: '#000000',
           justifyContent: 'center',
           alignItems: 'center',
         }}
         elevation={0}>
-        <Surface
-          style={{
-            width: 64,
-            height: 64,
-            borderRadius: 32,
-            backgroundColor: theme.primary,
-            justifyContent: 'center',
-            alignItems: 'center',
-            marginBottom: 16,
-          }}
-          elevation={1}>
-          <PaperText variant="displaySmall" style={{ color: '#FFF', fontFamily: 'Manrope', fontWeight: '800' }}>
-            F
-          </PaperText>
-        </Surface>
         <ActivityIndicator animating color={theme.primary} />
       </Surface>
     );
   }
 
+  const navTheme = isDark
+    ? {
+        ...DarkTheme,
+        colors: {
+          ...DarkTheme.colors,
+          background: theme.background,
+          card: theme.surface,
+          text: theme.text,
+          border: theme.border,
+          primary: theme.primary,
+        },
+      }
+    : {
+        ...DefaultTheme,
+        colors: {
+          ...DefaultTheme.colors,
+          background: theme.background,
+          card: theme.surface,
+          text: theme.text,
+          border: theme.border,
+          primary: theme.primary,
+        },
+      };
+
   return (
     <PaperProvider theme={isDark ? paperDarkTheme : paperLightTheme}>
-      <NavigationContainer ref={navigationRef} linking={linking}>
+      <NavigationContainer ref={navigationRef} linking={linking} theme={navTheme}>
         <StatusBar
           barStyle={isDark ? 'light-content' : 'dark-content'}
           backgroundColor={theme.background}
@@ -132,7 +151,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
-        <ThemeProvider initialDark={isDarkMode}>
+        <ThemeProvider>
           <ErrorBoundary>
             <AppContent />
           </ErrorBoundary>

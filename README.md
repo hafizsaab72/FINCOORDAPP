@@ -1,6 +1,6 @@
-# FinCoord — Financial Coordination App
+# OnTheTab — Shared Expense Management
 
-FinCoord is a React Native application for shared expense management, bill tracking, and friend-based financial coordination. It bridges a ledger and a reminder engine around three core pillars: **What I owe**, **What I am owed**, and **What is due next**.
+OnTheTab is a React Native application for shared expense management and friend-based financial coordination. It answers two core questions: **What do I owe?** and **What am I owed?**
 
 ---
 
@@ -25,22 +25,20 @@ FinCoord is a React Native application for shared expense management, bill track
 - Free users see summary cards; charts are Pro-gated.
 
 ### Expense Search
-- Full-text search across expenses and bills.
+- Full-text search across expenses.
 - Filter by amount range and category; sort by newest, oldest, or highest amount.
 
 ### Data Export *(Pro)*
-- Export all expenses and bills to CSV via the native share sheet.
+- Export all expenses to CSV via the native share sheet.
 
 ### Receipt OCR
-- Scan a receipt from AddExpenseModal; backend runs Tesseract.js OCR to extract amount, merchant, and date.
+- Scan a receipt from AddExpenseScreen; backend runs Tesseract.js OCR to extract amount, merchant, and date.
 - Auto-fills the expense form; falls back gracefully if parsing fails.
 
-### Real-Time Currency Conversion
-- Live exchange rates from ExchangeRate-API, cached 24 h in Zustand.
-- AddExpenseModal shows "≈ X [home currency]" as you type.
+### Currency
+- Multi-currency support with user-selectable home currency.
+- Backend stores amounts in minor units (cents); UI displays major units.
 
-### Default Split Templates
-- Save a default split method per group. AddExpenseModal pre-fills it automatically.
 
 ### Push Notifications
 - Firebase Cloud Messaging (Android) + APNs (iOS).
@@ -54,15 +52,12 @@ FinCoord is a React Native application for shared expense management, bill track
 - Invite via WhatsApp, SMS, or share sheet (`fincoord://invite?ref=<userId>`).
 
 ### Shared Ledger
-- Group expenses with Equal, Percentage, or Custom split logic.
-- Balance summaries per group.
+- Group and non-group expenses with 5 split methods: Equal, Exact, Percentage, Shares, and Adjustment.
+- Multi-payer support (single or multiple payers with exact amounts).
+- Self-exclusion: payer can exclude themselves from the split.
+- Balance summaries per group with debt simplification.
 
-### Bills & Reminders
-- Track one-time and recurring bills (pending / handled / overdue).
-- Bill detail view with mark-as-handled action.
 
-### Multi-Currency
-- 14 currencies selectable from Settings, synced to/from the backend.
 
 ### UI & UX
 - **Green-First MD3 theme**: `#0F7A5B` (Light) / `#19A874` (Dark). Dark mode system-synced and toggleable.
@@ -92,18 +87,24 @@ FinCoord is a React Native application for shared expense management, bill track
 
 ```
 src/
-├── components/     CountryCodePicker, ProGate
+├── components/     ParticipantSelector, PayerSelector, SplitConfigurator,
+│                   CategoryPicker, CurrencySelector, DatePickerField,
+│                   ExpenseSummaryBar, CountryCodePicker, ProGate
 ├── constants/      paperTheme.ts, config.ts (API base URL)
 ├── context/        ThemeContext — useAppTheme(), toggleTheme()
 ├── navigation/     RootNavigator (stack + modals), AppNavigator (bottom tabs)
-├── screens/        Home, Groups, GroupDetail, Bills, BillDetail, Reminders,
-│                   Friends, Invite, Activity, Analytics, Search, Settings,
-│                   Profile, Upgrade, SignIn, SignUp, Welcome,
-│                   AddExpenseModal, AddBillModal, CreateGroupModal
-├── services/       api, authService, currencyService, notificationService, friendsService
+├── screens/        Home, Groups, GroupDetail, GroupSettings, CustomizeGroup,
+│                   Friends, FriendDetail, Invite, Activity, Analytics, Search,
+│                   Settings, Profile, Upgrade, SignIn, SignUp, Welcome,
+│                   ForgotPassword, ResetPassword, QRScanner, MyQRCode,
+│                   AddExpenseScreen, CreateGroupModal, SettleUpModal
+├── services/       api, authService, currencyService, notificationService,
+│                   friendsService, groupsService, activitiesService, expensesService
 ├── store/          useStore.ts — Zustand store with balance hooks
-├── types/          index.ts — Expense, Bill, Group, ActivityEntry, CurrentUser, SplitTemplate
-└── utils/          countries, exportData, notifications
+├── types/          index.ts — Expense, Activity, Group, Participant, Payer,
+│                   Split, SplitMethod, ContextType, PayerMode, CurrentUser
+└── utils/          countries, exportData, notifications, splitCalculations,
+│                   expenseValidation, balances, currency, validation
 ```
 
 ---
@@ -122,8 +123,8 @@ npx react-native run-ios
 
 1. Create a project at [console.firebase.google.com](https://console.firebase.google.com).
 2. Enable **Phone** sign-in under Authentication.
-3. **Android** — Add Android app (package `com.fincoordapp`) → download `google-services.json` → place at `android/app/google-services.json`.
-4. **iOS** — Add iOS app → download `GoogleService-Info.plist` → place at `ios/FinCoordApp/GoogleService-Info.plist`.
+3. **Android** — Add Android app (package `com.onthetab`) → download `google-services.json` → place at `android/app/google-services.json`.
+4. **iOS** — Add iOS app → download `GoogleService-Info.plist` → place at `ios/OnTheTab/GoogleService-Info.plist`.
 5. Upgrade Firebase project to **Blaze plan** (required for Phone Auth in production).
 6. **Testing without billing** — Add test numbers in Firebase Console → Authentication → Phone → *Phone numbers for testing* (e.g. `+91 9999999999` / OTP `123456`).
 
@@ -134,11 +135,12 @@ npx react-native run-ios
 This app connects to **FinCoordAPI** (see companion repo). The API base URL is set in `src/constants/config.ts`:
 
 ```ts
-// Android emulator: 10.0.2.2 → host machine localhost
-// iOS simulator:    localhost
-const HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-export const API_URL = `http://${HOST}:3000/api`;
+const REMOTE_URL = 'http://187.124.96.129/api';
+const LOCAL_URL = `http://${Platform.OS === 'android' ? '10.0.2.2' : 'localhost'}:3050/api`;
+export const API_URL = __DEV__ ? LOCAL_URL : REMOTE_URL;
 ```
+
+`__DEV__` is `true` when running via Metro bundler (development) and `false` in release builds (production).
 
 ```bash
 cd ../FinCoordAPI && npm run dev
@@ -152,16 +154,31 @@ cd ../FinCoordAPI && npm run dev
 |---|---|
 | `fincoord://invite?ref=<userId>` | InviteScreen — add friend from invite link |
 
+## Authentication
+
+The app supports email/password, phone OTP (Firebase), and guest mode.
+
+**Forgot Password Flow:**
+1. Tap "Forgot Password?" on the Sign In screen
+2. Enter your email → the backend generates a secure reset token
+3. Copy the token and proceed to the Reset Password screen
+4. Enter the token + your new password → password is updated
+5. Sign in with the new password
+
+Backend endpoints:
+- `POST /api/auth/forgot-password` — generates reset token (1-hour expiry)
+- `POST /api/auth/reset-password` — validates token and updates password
+
 ---
 
 ## Theme Tokens
 
 | Token | Light | Dark |
 |---|---|---|
-| Primary | `#0F7A5B` | `#19A874` |
-| Background | `#FFFFFF` | `#121212` |
-| Surface | `#F5FBF8` | `#1A1A1A` |
-| Border | `#C9E6D9` | `#2A2A2A` |
+| Primary | `#16A34A` | `#22C55E` |
+| Background | `#F0FDF4` | `#080F0A` |
+| Surface | `#FFFFFF` | `#0F1A12` |
+| Border | `#BBF7D0` | `#1A2E1C` |
 
 ---
 
@@ -170,14 +187,11 @@ cd ../FinCoordAPI && npm run dev
 ```ts
 {
   expenses: Expense[];
-  bills: Bill[];
   groups: Group[];
-  activities: ActivityEntry[];
+  activities: Activity[];
   isGuest: boolean;
   currency: string;
   isPro: boolean;
-  splitTemplates: Record<string, SplitTemplate>;
-  exchangeRates: Record<string, number>;
   currentUser: CurrentUser | null;
   token: string | null;
   _hasHydrated: boolean;
@@ -186,4 +200,4 @@ cd ../FinCoordAPI && npm run dev
 
 ---
 
-**Version:** 1.4.0
+**Version:** 2.0.0

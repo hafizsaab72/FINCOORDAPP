@@ -29,13 +29,13 @@ export default function ProGate({ feature, children }: ProGateProps) {
       <Text variant="titleSmall" style={[styles.title, { color: theme.text }]}>
         {feature} is a Pro feature
       </Text>
-      <Text variant="bodySmall" style={styles.sub}>
-        Upgrade to FinCoord Pro to unlock this and more.
+      <Text variant="bodySmall" style={[styles.sub, { color: theme.textSecondary }]}>
+        Upgrade to OnTheTab Pro to unlock this and more.
       </Text>
       <Button
         mode="contained"
         icon="crown"
-        onPress={() => navigation.navigate('Upgrade')}
+        onPress={() => navigation.navigate('AccountTab', { screen: 'Upgrade' })}
         style={[styles.btn, { backgroundColor: theme.primary }]}
         compact
       >

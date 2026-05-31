@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Brand green background -->
-    <item android:drawable="@color/splash_green"/>
-    <!-- Centered app icon -->
+    <!-- Black background -->
+    <item android:drawable="@color/app_background"/>
+    <!-- Inset to add padding so the logo isn't cropped -->
     <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@mipmap/ic_launcher"/>
+        <inset
+            android:insetLeft="24dp"
+            android:insetRight="24dp"
+            android:insetTop="24dp"
+            android:insetBottom="24dp">
+            <bitmap
+                android:src="@drawable/splash_logo"
+                android:gravity="fill_horizontal|center_vertical"
+                android:antialias="true"/>
+        </inset>
     </item>
 </layer-list>

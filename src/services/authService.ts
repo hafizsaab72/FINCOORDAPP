@@ -66,4 +66,25 @@ export const authService = {
   clearAllData: () => apiFetch('/data', 'DELETE'),
 
   deleteAccount: () => apiFetch('/auth/account', 'DELETE'),
+
+  forgotPassword: async (email: string): Promise<{ message: string; token: string }> => {
+    return apiFetch<{ message: string; token: string }>('/auth/forgot-password', 'POST', { email });
+  },
+
+  resetPassword: async (token: string, newPassword: string): Promise<{ message: string }> => {
+    return apiFetch<{ message: string }>('/auth/reset-password', 'POST', { token, newPassword });
+  },
+
+  // OTP-based password reset
+  sendOtp: async (email: string): Promise<{ message: string; otp: string }> => {
+    return apiFetch<{ message: string; otp: string }>('/auth/send-otp', 'POST', { email });
+  },
+
+  verifyOtp: async (email: string, otp: string): Promise<{ message: string }> => {
+    return apiFetch<{ message: string }>('/auth/verify-otp', 'POST', { email, otp });
+  },
+
+  resetPasswordWithOtp: async (email: string, otp: string, newPassword: string): Promise<{ message: string }> => {
+    return apiFetch<{ message: string }>('/auth/reset-password-with-otp', 'POST', { email, otp, newPassword });
+  },
 };

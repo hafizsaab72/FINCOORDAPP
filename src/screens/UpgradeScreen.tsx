@@ -34,7 +34,7 @@ export default function UpgradeScreen({ navigation }: any) {
       <View style={[styles.hero, { backgroundColor: theme.primary }]}>
         <Icon source="crown" size={48} color="#FFD700" />
         <Text variant="headlineMedium" style={styles.heroTitle}>
-          FinCoord Pro
+          OnTheTab Pro
         </Text>
         <Text variant="bodyMedium" style={styles.heroSub}>
           Unlock the full financial coordination experience
@@ -56,7 +56,7 @@ export default function UpgradeScreen({ navigation }: any) {
 
       <Card mode="outlined" style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         {PRO_FEATURES.map((feature, idx) => (
-          <React.Fragment key={feature.title}>
+          <View key={feature.title}>
             <List.Item
               title={feature.title}
               description={feature.desc}
@@ -66,7 +66,7 @@ export default function UpgradeScreen({ navigation }: any) {
               descriptionStyle={{ color: theme.textSecondary }}
             />
             {idx < PRO_FEATURES.length - 1 && <Divider />}
-          </React.Fragment>
+          </View>
         ))}
       </Card>
 

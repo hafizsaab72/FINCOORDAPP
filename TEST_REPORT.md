@@ -1,7 +1,7 @@
-# FinCoordApp — Theme, Font & Error Boundary Test Report
+# OnTheTab — Test Report
 
-**Date:** 2026-05-01
-**Scope:** Bold theme overhaul, Manrope font integration, Error Boundary addition
+**Date:** 2026-05-26
+**Scope:** Transaction system rewrite, Bills removal, split calculation test coverage
 **Tester:** Kimi Code CLI
 
 ---
@@ -12,7 +12,7 @@
 |---|------|------------------|-----------------|---------------|--------|
 | 1 | TypeScript type check | `npx tsc --noEmit` | Zero errors in changed files | Clean for all changed files | ✅ PASS |
 | 2 | ESLint | `npm run lint` | Zero errors | 0 errors, 347 warnings (all pre-existing) | ✅ PASS |
-| 3 | Unit Tests (Jest) | `npm test` | All tests pass | 1/1 passed | ✅ PASS |
+| 3 | Unit Tests (Jest) | `npm test` | All tests pass | 96/96 passed (4 suites) | ✅ PASS |
 | 4 | Metro Bundle (Android) | `npx react-native bundle --platform android` | Bundle builds without parse/runtime errors | Bundle written successfully | ✅ PASS |
 | 5 | Metro Bundle (iOS) | `npx react-native bundle --platform ios` | Bundle builds without parse/runtime errors | Bundle written successfully | ✅ PASS |
 | 6 | iOS CocoaPods | `cd ios && pod install` | Pods install cleanly | 106 pods installed, no errors | ✅ PASS |
@@ -59,16 +59,14 @@
   5. Added `/* eslint-env jest */` to `jest.setup.js`
 - **Status:** ✅ Resolved
 
-### 2.4 ESLint: Unused Variable `_localId` (Pre-existing)
-- **File:** `src/screens/AddBillModal.tsx`
-- **Severity:** 🟡 Warning (treated as error by eslint config)
-- **Root Cause:** `const { id: _localId, ...billPayload } = bill` triggered `@typescript-eslint/no-unused-vars` despite underscore prefix.
-- **Fix:**
-  ```ts
-  const { id, ...billPayload } = bill;
-  void id; // intentionally unused
-  ```
-- **Status:** ✅ Resolved
+### 2.4 New Unit Test Suites
+- **Files:** `src/utils/__tests__/splitCalculations.test.ts`, `src/utils/__tests__/expenseValidation.test.ts`, `src/utils/__tests__/balances.test.ts`
+- **Severity:** 🟢 Enhancement
+- **Coverage:**
+  - **38 tests** — equal/exact/percentage/shares/adjustment splits + finance invariants (sums to total, no negatives)
+  - **29 tests** — spec validation rules G1–G8, MP1–MP3, SM1–SM7, self-exclusion
+  - **28 tests** — balance computation, debt simplification, who-owes-who
+- **Status:** ✅ Added
 
 ### 2.5 `react-native.config.js` Pointed to Non-existent Directory
 - **File:** `react-native.config.js`
@@ -114,9 +112,9 @@ cd /Users/hafizsaab/Documents/Projects/FinCoordApp/android && ./gradlew assemble
 |---|-------|----------|----------|
 | 1 | `Cannot find namespace 'NodeJS'` | `SignInScreen.tsx`, `SignUpScreen.tsx` | 🔴 TypeScript Error |
 | 2 | Inline style warnings | Multiple screens/components | 🟡 ESLint Warning |
-| 3 | Nested component definitions during render | `ActivityScreen.tsx`, `FriendsScreen.tsx`, `BillDetailScreen.tsx`, etc. | 🟡 ESLint Warning |
+| 3 | Nested component definitions during render | `ActivityScreen.tsx`, `FriendsScreen.tsx`, etc. | 🟡 ESLint Warning |
 | 4 | Deprecated Gradle features | Android build output | 🟡 Build Warning |
-| 5 | Bitwise operator warnings | `AddExpenseModal.tsx`, `FriendsScreen.tsx`, `groupTypes.ts` | 🟡 ESLint Warning |
+| 5 | Bitwise operator warnings | `FriendsScreen.tsx`, `groupTypes.ts` | 🟡 ESLint Warning |
 
 ---
 
@@ -132,8 +130,12 @@ cd /Users/hafizsaab/Documents/Projects/FinCoordApp/android && ./gradlew assemble
 | `__mocks__/react-native-linear-gradient.js` | Created | Mock LinearGradient for Jest |
 | `__mocks__/react-native-paper-dates.js` | Created | Mock paper-dates for Jest |
 | `__mocks__/react-native-gifted-charts.js` | Created | Mock gifted-charts for Jest |
-| `src/screens/AddBillModal.tsx` | Modified | Fix unused variable lint error |
 | `react-native.config.js` | Modified | Remove incorrect asset path |
+| `src/utils/splitCalculations.ts` | Created | Cent-precision split calculators |
+| `src/utils/expenseValidation.ts` | Created | Client-side spec validation |
+| `src/utils/__tests__/splitCalculations.test.ts` | Created | 38 split calculation tests |
+| `src/utils/__tests__/expenseValidation.test.ts` | Created | 29 validation tests |
+| `src/utils/__tests__/balances.test.ts` | Created | 28 balance logic tests |
 
 ---
 

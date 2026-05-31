@@ -71,7 +71,7 @@ export default function InviteScreen() {
               {inviter.name}
             </Text>
             <Text variant="bodyMedium" style={[styles.subtitle, { color: theme.textSecondary }]}>
-              invited you to connect on FinCoord
+              invited you to connect on OnTheTab
             </Text>
 
             {done ? (

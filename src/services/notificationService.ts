@@ -8,8 +8,8 @@ import { API_URL as API_BASE } from '../constants/config';
 
 export async function createNotificationChannel() {
   await notifee.createChannel({
-    id: 'fincoord-default',
-    name: 'FinCoord Notifications',
+    id: 'onthetab-default',
+    name: 'OnTheTab Notifications',
     importance: AndroidImportance.HIGH,
     visibility: AndroidVisibility.PUBLIC,
     sound: 'default',
@@ -64,7 +64,7 @@ export function setupForegroundHandler(): () => void {
       body: body ?? '',
       data: remoteMessage.data,
       android: {
-        channelId: 'fincoord-default',
+        channelId: 'onthetab-default',
         pressAction: { id: 'default' },
         importance: AndroidImportance.HIGH,
       },
@@ -100,7 +100,7 @@ export function setupBackgroundHandler(): void {
       body: body ?? '',
       data: remoteMessage.data,
       android: {
-        channelId: 'fincoord-default',
+        channelId: 'onthetab-default',
         pressAction: { id: 'default' },
       },
     });

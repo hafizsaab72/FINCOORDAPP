@@ -1,21 +1,22 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Surface, Icon, Button } from 'react-native-paper';
 import { PieChart } from 'react-native-gifted-charts';
 import { useStore } from '../store/useStore';
 import { useAppTheme } from '../context/ThemeContext';
 import { formatAmount } from '../utils/currency';
+import { useAnalytics } from '../hooks/useAnalytics';
 import ProGate from '../components/ProGate';
 import { haptics } from '../utils/haptics';
 
 const SCREEN_W = Dimensions.get('window').width;
 
-const CATEGORY_COLORS = ['#0F7A5B', '#19A874', '#34C88A', '#FFAA00', '#FF6B35', '#6C63FF', '#FF3B30'];
+const CATEGORY_COLORS = ['#3B82F6', '#06B6D4', '#8B5CF6', '#F59E0B', '#EC4899', '#22C55E', '#EF4444'];
 
-export default function AnalyticsScreen({ route }: any) {
+export default function AnalyticsScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const expenses = useStore(state => state.expenses);
-  const bills = useStore(state => state.bills);
+  const insets = useSafeAreaInsets();
   const currency = useStore(state => state.currency);
   const currentUser = useStore(state => state.currentUser);
   const isPro = useStore(state => state.isPro);
@@ -23,80 +24,37 @@ export default function AnalyticsScreen({ route }: any) {
   const friendId = route?.params?.friendId;
   const friendName = route?.params?.friendName;
 
-  // Filter expenses to friend-specific if navigated from FriendDetail
-  const filteredExpenses = friendId
-    ? expenses.filter(e => e.payerId === friendId || Object.keys(e.splitDetails).includes(friendId))
-    : expenses;
+  const { data, isLoading } = useAnalytics(friendId);
 
-  // Build a map of user IDs to names from groups and expenses
-  const nameMap = React.useMemo(() => {
-    const map: Record<string, string> = {};
-    if (currentUser?.id) map[currentUser.id] = currentUser.name;
-    // Resolve names from expenses participantNames
-    for (const e of expenses) {
-      if (e.participantNames) {
-        Object.assign(map, e.participantNames);
-      }
-    }
-    return map;
-  }, [expenses, currentUser]);
-
-  // --- Totals ---
-  const totalSpent = filteredExpenses.reduce((s, e) => s + e.amount, 0);
-
-  // Calculate user's share (what they paid + what they owe)
-  const myId = currentUser?.id ?? '';
-  const yourShare = React.useMemo(() => {
-    let share = 0;
-    for (const e of filteredExpenses) {
-      const participants = Object.keys(e.splitDetails);
-      if (participants.length === 0) continue;
-
-      let myShare = 0;
-      if (e.splitMethod === 'equal') {
-        myShare = e.amount / participants.length;
-      } else if (e.splitMethod === 'percentage') {
-        myShare = (e.amount * (e.splitDetails[myId] || 0)) / 100;
-      } else {
-        myShare = e.splitDetails[myId] || 0;
-      }
-
-      if (participants.includes(myId)) {
-        share += myShare;
-      }
-    }
-    return share;
-  }, [filteredExpenses, myId]);
-
+  const totalSpent = data?.totalSpent ?? 0;
+  const yourShare = data?.yourShare ?? 0;
+  const expenseCount = data?.expenseCount ?? 0;
   const percentage = totalSpent > 0 ? Math.round((yourShare / totalSpent) * 100) : 0;
 
-  // --- Pie chart data by category ---
+  // Build pie chart data from API category breakdown
   const pieData = React.useMemo(() => {
-    const catMap: Record<string, number> = {};
-    for (const e of filteredExpenses) {
-      const cat = e.notes?.split(' ')[0] || 'Other';
-      catMap[cat] = (catMap[cat] || 0) + e.amount;
-    }
-    // Also include bills
-    for (const b of bills) {
-      catMap[b.category] = (catMap[b.category] || 0) + b.amount;
-    }
-    const entries = Object.entries(catMap);
-    if (entries.length === 0) return null;
-
-    return entries.map(([cat, total], idx) => ({
-      value: parseFloat(total.toFixed(2)),
-      text: cat,
+    if (!data?.categoryBreakdown?.length) return null;
+    return data.categoryBreakdown.map((c, idx) => ({
+      value: c.amount,
+      text: c.category,
       color: CATEGORY_COLORS[idx % CATEGORY_COLORS.length],
     }));
-  }, [filteredExpenses, bills]);
+  }, [data]);
 
   const chartTotal = pieData?.reduce((s, d) => s + d.value, 0) ?? 0;
+
+  if (isLoading) {
+    return (
+      <View style={[styles.centered, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
 
   return (
     <ScrollView
       style={[styles.scrollRoot, { backgroundColor: theme.background }]}
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[styles.container, { paddingBottom: 120 + insets.bottom }]}
     >
       {friendName && (
         <Text variant="labelSmall" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
@@ -109,7 +67,7 @@ export default function AnalyticsScreen({ route }: any) {
         {friendName || 'All-time spending'}
       </Text>
       <Text variant="bodyMedium" style={{ color: theme.textSecondary, marginBottom: 20 }}>
-        All-time spending
+        {expenseCount > 0 ? `${expenseCount} expense${expenseCount > 1 ? 's' : ''}` : 'No expenses yet'}
       </Text>
 
       {/* Donut chart */}
@@ -164,7 +122,7 @@ export default function AnalyticsScreen({ route }: any) {
               {formatAmount(yourShare, currency)}
             </Text>
             <Text variant="bodySmall" style={{ color: theme.textSecondary, marginTop: 2 }}>
-              {percentage}% of total group spending
+              {percentage}% of total spending
             </Text>
           </View>
         </View>
@@ -181,10 +139,10 @@ export default function AnalyticsScreen({ route }: any) {
           </Text>
           <Button
             mode="contained"
-            style={[styles.proBtn, { backgroundColor: theme.info }]}
-            onPress={() => { haptics.light(); /* navigate to upgrade */ }}
+            style={[styles.proBtn, { backgroundColor: theme.primary }]}
+            onPress={() => { haptics.light(); navigation.navigate('AccountTab', { screen: 'Upgrade' }); }}
           >
-            Get FinCoord Pro
+            Get OnTheTab Pro
           </Button>
         </Surface>
       )}
@@ -219,35 +177,25 @@ export default function AnalyticsScreen({ route }: any) {
             TOP PAYERS
           </Text>
           <Surface style={[styles.chartCard, { backgroundColor: theme.surface, borderColor: theme.border }]} elevation={0}>
-            {(() => {
-              const payerMap: Record<string, number> = {};
-              for (const e of filteredExpenses) {
-                payerMap[e.payerId] = (payerMap[e.payerId] || 0) + e.amount;
-              }
-              const topSpenders = Object.entries(payerMap)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 5);
-
-              return topSpenders.length === 0 ? (
-                <EmptyChart label="No payer data yet" theme={theme} />
-              ) : (
-                topSpenders.map(([payerId, total], idx) => (
-                  <View key={payerId} style={[styles.spenderRow, idx > 0 && { borderTopWidth: 1, borderTopColor: theme.border }]}>
-                    <View style={[styles.rankBadge, { backgroundColor: theme.primary + '20' }]}>
-                      <Text variant="labelSmall" style={{ color: theme.primary, fontWeight: '700' }}>
-                        #{idx + 1}
-                      </Text>
-                    </View>
-                    <Text variant="bodyMedium" style={{ color: theme.text, flex: 1 }} numberOfLines={1}>
-                      {nameMap[payerId] || payerId}
-                    </Text>
-                    <Text variant="titleSmall" style={{ color: theme.primary, fontWeight: '600' }}>
-                      {formatAmount(total, currency)}
+            {(!data?.topPayers?.length) ? (
+              <EmptyChart label="No payer data yet" theme={theme} />
+            ) : (
+              data.topPayers.map((p, idx) => (
+                <View key={p.payerId} style={[styles.spenderRow, idx > 0 && { borderTopWidth: 1, borderTopColor: theme.border }]}>
+                  <View style={[styles.rankBadge, { backgroundColor: theme.primary + '20' }]}>
+                    <Text variant="labelSmall" style={{ color: theme.primary, fontWeight: '700' }}>
+                      #{idx + 1}
                     </Text>
                   </View>
-                ))
-              );
-            })()}
+                  <Text variant="bodyMedium" style={{ color: theme.text, flex: 1 }} numberOfLines={1}>
+                    {p.payerId === currentUser?.id ? 'You' : `User ${p.payerId.slice(-4)}`}
+                  </Text>
+                  <Text variant="titleSmall" style={{ color: theme.primary, fontWeight: '600' }}>
+                    {formatAmount(p.amount, currency)}
+                  </Text>
+                </View>
+              ))
+            )}
           </Surface>
         </>
       </ProGate>
@@ -266,6 +214,7 @@ function EmptyChart({ label, theme }: { label: string; theme: any }) {
 
 const styles = StyleSheet.create({
   scrollRoot: { flex: 1 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   container: { padding: 20, paddingBottom: 40 },
   sectionLabel: { marginBottom: 10, marginTop: 16, letterSpacing: 1 },
   emptyDonut: {

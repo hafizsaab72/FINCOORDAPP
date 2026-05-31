@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { colors as staticColors } from '../theme/tokens';
 import { View, StyleSheet, Alert, Platform, Modal, KeyboardAvoidingView } from 'react-native';
 import { Text, Button, ActivityIndicator, TextInput, Surface } from 'react-native-paper';
 import {
@@ -7,7 +8,7 @@ import {
   useCameraPermission,
   useCodeScanner,
 } from 'react-native-vision-camera';
-import { useAppTheme } from '../context/ThemeContext';
+import { useAppTheme, useTheme } from '../context/ThemeContext';
 import { friendsService } from '../services/friendsService';
 import { normalizeCode } from './MyQRCodeScreen';
 import { haptics } from '../utils/haptics';
@@ -25,6 +26,7 @@ function parseQRValue(value: string): string | null {
 }
 
 export default function QRScannerScreen({ navigation }: any) {
+  const { colors } = useTheme();
   const { theme } = useAppTheme();
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
@@ -68,7 +70,7 @@ export default function QRScannerScreen({ navigation }: any) {
     if (!trimmed) return;
     const userId = parseQRValue(trimmed);
     if (!userId) {
-      Alert.alert('Invalid code', 'Please enter a valid FinCoord friend code.');
+      Alert.alert('Invalid code', 'Please enter a valid OnTheTab friend code.');
       return;
     }
     setManualLoading(true);
@@ -179,7 +181,7 @@ export default function QRScannerScreen({ navigation }: any) {
         {/* Top area */}
         <Surface style={styles.topArea} elevation={0}>
           <Text style={styles.instructionText}>
-            {scanned ? '' : 'Point at a FinCoord QR code'}
+            {scanned ? '' : 'Point at a OnTheTab QR code'}
           </Text>
         </Surface>
 
@@ -193,7 +195,7 @@ export default function QRScannerScreen({ navigation }: any) {
             <View style={[styles.corner, styles.cornerBL]} />
             <View style={[styles.corner, styles.cornerBR]} />
             {processing && (
-              <ActivityIndicator color="#FFF" size="large" style={styles.scanSpinner} />
+              <ActivityIndicator color={colors.white} size="large" style={styles.scanSpinner} />
             )}
           </View>
           <Surface style={styles.sideMask} elevation={0}><></></Surface>
@@ -208,13 +210,13 @@ export default function QRScannerScreen({ navigation }: any) {
           )}
           {status === 'error' && (
             <View style={styles.statusBadgeContainer}>
-              <View style={[styles.statusBadge, { backgroundColor: '#FF3B30' }]}>
+              <View style={[styles.statusBadge, { backgroundColor: colors.debt }]}>
                 <Text style={styles.statusText}>{statusMsg}</Text>
               </View>
               <Button
                 mode="outlined"
-                textColor="#FFF"
-                style={{ marginTop: 12, borderColor: '#FFF' }}
+                textColor={colors.white}
+                style={{ marginTop: 12, borderColor: colors.white }}
                 onPress={() => { setScanned(false); setStatus('idle'); setStatusMsg(''); }}
               >
                 Try Again
@@ -223,7 +225,7 @@ export default function QRScannerScreen({ navigation }: any) {
           )}
           <Button
             mode="text"
-            textColor="#FFF"
+            textColor={colors.white}
             onPress={() => setManualVisible(true)}
             style={{ marginTop: status !== 'idle' ? 8 : 0 }}
           >
@@ -316,10 +318,10 @@ function ManualCodeModal({ visible, value, loading, theme, onChange, onSubmit, o
 const VIEWFINDER_SIZE = 240;
 const CORNER_SIZE = 22;
 const CORNER_BORDER = 4;
-const CORNER_COLOR = '#FFF';
+const CORNER_COLOR = staticColors.white;
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000' },
+  root: { flex: 1, backgroundColor: staticColors.black },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   permText: { textAlign: 'center', marginBottom: 20, lineHeight: 22 },
   permBtn: { borderRadius: 10, marginBottom: 4 },
@@ -332,7 +334,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   instructionText: {
-    color: '#FFF',
+    color: staticColors.white,
     fontSize: 16,
     fontWeight: '600',
     textShadowColor: 'rgba(0,0,0,0.6)',
@@ -366,7 +368,7 @@ const styles = StyleSheet.create({
   },
   statusBadgeContainer: { alignItems: 'center' },
   statusBadge: { borderRadius: 20, paddingHorizontal: 20, paddingVertical: 10 },
-  statusText: { color: '#FFF', fontWeight: '600', fontSize: 15 },
+  statusText: { color: staticColors.white, fontWeight: '600', fontSize: 15 },
 
   // Manual code modal
   modalBackdrop: {
